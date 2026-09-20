@@ -1,6 +1,11 @@
 using System.Diagnostics;
 using HolyHand.Core.Common;
 using HolyHand.Core.Jev;
+using HolyHand.Core.Models;
+using HolyHand.Core.ScreenReading;
+using HolyHand.Platform.ScreenReading;
+using HolyHand.Platform.Windowing;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace HolyHand.Cli;
@@ -24,7 +29,7 @@ public static class Program
         return command switch
         {
             "check" => await RunCheckAsync(),
-            "snapshot" => RunSnapshot(),
+            "snapshot" => await RunSnapshotAsync(args),
             "dry-run" => RunDryRun(args),
             _ => PrintUnknownCommand(command)
         };
@@ -149,9 +154,112 @@ public static class Program
         }
     }
 
-    private static int RunSnapshot()
+    private static async Task<int> RunSnapshotAsync(string[] args)
     {
-        Console.WriteLine("Snapshot command will be available after Milestone M4 (Screen Reader).");
+        Console.WriteLine("HolyHand Window Snapshot");
+        Console.WriteLine("--------------------------------------------------------------------------------");
+
+        AppTarget? target = null;
+        if (args.Length > 1 && !string.IsNullOrWhiteSpace(args[1]))
+        {
+            var query = args[1];
+            if (int.TryParse(query, out var pid))
+            {
+                target = WindowCaptureService.CaptureWindowByProcessId(pid);
+            }
+            else
+            {
+                target = WindowCaptureService.CaptureWindowByProcessName(query);
+            }
+
+            if (target == null)
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine($"Could not find active window for process '{query}'. Falling back to foreground window.");
+                Console.ResetColor();
+            }
+        }
+
+        if (target == null)
+        {
+            Console.WriteLine("Focus the window you wish to capture. Capturing in 2 seconds...");
+            await Task.Delay(2000);
+            target = WindowCaptureService.CaptureCurrentForegroundWindow();
+        }
+
+        if (target == null || target.WindowHandle == IntPtr.Zero)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine("Failed to capture target window.");
+            Console.ResetColor();
+            return 1;
+        }
+
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine($"Target Window: \"{target.WindowTitle}\"");
+        Console.WriteLine($"Process: {target.ProcessName} (PID {target.ProcessId})");
+        Console.WriteLine($"Bounds: {target.Bounds.Width}x{target.Bounds.Height} at ({target.Bounds.X}, {target.Bounds.Y})");
+        Console.ResetColor();
+
+        if (WindowCaptureService.IsTargetElevated(target.ProcessId))
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine("\n[SECURITY WARNING] Target application is running as Administrator (Elevated).");
+            Console.WriteLine("UI Automation cannot inspect or interact with this window due to Windows UIPI.");
+            Console.ResetColor();
+            return 1;
+        }
+
+        Console.WriteLine("\nTraversing accessibility tree with CacheRequest...");
+        var sw = Stopwatch.StartNew();
+
+        var options = ScreenReaderOptions.Default;
+        using var loggerFactory = LoggerFactory.Create(b => b.AddConsole().SetMinimumLevel(LogLevel.Warning));
+        var ocrLogger = loggerFactory.CreateLogger<WindowsOcrService>();
+        var readerLogger = loggerFactory.CreateLogger<UiaScreenReader>();
+
+        var ocrService = new WindowsOcrService(ocrLogger);
+        using var screenReader = new UiaScreenReader(options, ocrService, readerLogger);
+
+        IReadOnlyList<AccessibilityElement> elements;
+        try
+        {
+            elements = await screenReader.ReadElementsAsync(target);
+            sw.Stop();
+        }
+        catch (Exception ex)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine($"Snapshot failed: {ex.Message}");
+            Console.ResetColor();
+            return 1;
+        }
+
+        Console.ForegroundColor = ConsoleColor.Green;
+        Console.WriteLine($"Completed in {sw.ElapsedMilliseconds}ms | Found {elements.Count} elements");
+        Console.ResetColor();
+
+        int ocrCount = elements.Count(e => e.Source == "ocr");
+        int interactiveCount = elements.Count(e => ElementRanker.IsInteractive(e.Role));
+
+        Console.WriteLine($"Interactive Controls: {interactiveCount} | OCR Elements: {ocrCount}");
+        Console.WriteLine("--------------------------------------------------------------------------------");
+        Console.WriteLine($"{"ID",-5} | {"Role",-14} | {"State",-10} | {"Label / Text"}");
+        Console.WriteLine("--------------------------------------------------------------------------------");
+
+        foreach (var el in elements)
+        {
+            var state = el.Focused ? "[FOCUSED]" : (el.Enabled ? "Enabled" : "Disabled");
+            var label = !string.IsNullOrWhiteSpace(el.DisplayLabel) ? el.DisplayLabel : "(empty)";
+            if (label.Length > 60) label = label[..57] + "...";
+
+            var color = el.Focused ? ConsoleColor.Yellow : (ElementRanker.IsInteractive(el.Role) ? ConsoleColor.Cyan : ConsoleColor.Gray);
+            Console.ForegroundColor = color;
+            Console.WriteLine($"{el.Id,-5} | {el.DisplayRole,-14} | {state,-10} | {label}");
+        }
+
+        Console.ResetColor();
+        Console.WriteLine("--------------------------------------------------------------------------------");
         return 0;
     }
 

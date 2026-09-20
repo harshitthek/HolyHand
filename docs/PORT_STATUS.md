@@ -12,7 +12,7 @@
 | 3 | Text input overlay/popup | done (tested) | PromptPopupWindow.xaml | WPF borderless topmost window (<200ms show) |
 | 4 | Status indicator (floating) | not started | — | WPF floating panel |
 | 5 | Target app capture | done (tested) | WindowCaptureService.cs | GetForegroundWindow + process info + UIPI check |
-| 6 | Accessibility tree walking | not started | — | FlaUI.UIA3 with CacheRequest |
+| 6 | Accessibility tree walking | done (tested) | UiaScreenReader.cs, ScreenReaderTests.cs | FlaUI.UIA3 with CacheRequest (RD-01, RD-02, RD-04) |
 | 7 | Element model (id, role, label, value) | done (tested) | AccessibilityElement.cs | C# record with UIA mappings and outcome evidence logic |
 | 8 | Jev API client (action selection) | done (tested) | JevClientTests.cs, Cli check | HttpClient + Vercel AI Gateway /v1/evaluate (JV-01..09 live verified: 843ms, $0) |
 | 9 | Jev text selection (2-phase) | done (tested) | JevDecisionModel.cs | Regex extraction + Jev choice selection |
@@ -27,8 +27,8 @@
 | 18 | Field focus confirmation | not started | — | UIA focus + click fallback |
 | 19 | Loop guard / stall detection | not started | — | Portable from upstream |
 | 20 | Action verification (post-action) | not started | — | Portable from upstream |
-| 21 | OCR fallback (Apple Vision → Win OCR) | not started | — | Windows.Media.Ocr |
-| 22 | Window snapshot (for OCR) | not started | — | PrintWindow / BitBlt |
+| 21 | OCR fallback (Apple Vision → Win OCR) | done (tested) | WindowsOcrService.cs, ScreenReaderTests.cs | Windows.Media.Ocr local fallback (RD-06) |
+| 22 | Window snapshot (for OCR) | done (tested) | WindowsOcrService.cs | Graphics.CopyFromScreen / WinRT SoftwareBitmap |
 | 23 | API key storage (Keychain → Cred Mgr) | done (tested) | EnvLoader.cs | Process environment + .env file loading |
 | 24 | Error detail extraction + key redaction | done (tested) | JevExceptions.cs | Regex redaction for vck_* and Bearer tokens (JV-06) |
 | 25 | CDP browser support (Electron) | not started | — | M9, optional |

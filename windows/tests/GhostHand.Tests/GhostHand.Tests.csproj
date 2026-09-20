@@ -5,10 +5,12 @@
     <AssemblyName>HolyHand.Tests</AssemblyName>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <UseWPF>true</UseWPF>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\HolyHand.Core\HolyHand.Core.csproj" />
+    <ProjectReference Include="..\..\src\HolyHand.Platform\HolyHand.Platform.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -13,5 +13,6 @@ public record AppTarget
     public string WindowTitle { get; init; } = string.Empty;
     public IntPtr WindowHandle { get; init; }
     public Rectangle WindowBounds { get; init; }
+    public Rectangle Bounds => WindowBounds;
     public bool IsElevated { get; init; }
 }

@@ -290,6 +290,50 @@ Supporting files: `README.md`, `Package.swift`, `LICENSE`, `rebuild.sh`
 ### Next Step
 - Milestone M4: Screen Reading & UIA3 Snapshot (`FlaUI.UIA3` tree walker, CacheRequest batch reads, node/depth caps, stable IDs, password filtering, and `Cli snapshot`).
 
+---
+
+## 2026-09-21 — M4: Screen Reading & UIA3 Snapshot
+
+### Session Details
+- **Date**: 2026-09-21
+- **Milestone**: M4 — Screen Reading & UIA3 Snapshot
+
+### Components Built
+1. **Screen Reading Configuration & Sanitization** (`HolyHand.Core/ScreenReading/`):
+   - `ScreenReaderOptions.cs`: Options model supporting `MaxNodes` (500), `MaxDepth` (30), `MaxCandidates` (40), `OcrFallbackThreshold` (5 interactive controls), `FilterOffscreen` (true), and `FilterDisabled` (false).
+   - `SecretSanitizer.cs`: Security boundary redacting password fields to `[PASSWORD]`, credit card numbers (`(?:\d[ -]*?){13,16}`) to `[REDACTED_CARD]`, API keys (`vck_*`, `sk-*`, `ghp_*`) to `[REDACTED_KEY]`, and Bearer tokens to `Bearer [REDACTED]`.
+   - `ElementRanker.cs`: Deterministic stable sequential ID assignment (`e1`, `e2`...), priority ranking (focused first, interactive controls second, labeled controls third, outcome evidence fourth, visual top-left ordering fifth).
+2. **UIA3 Screen Reader** (`HolyHand.Platform/ScreenReading/`):
+   - `UiaScreenReader.cs`: Implements `IScreenReader`.
+   - Attaches to target HWND via `UIA3Automation.FromHandle`.
+   - Uses `CacheRequest` with `TreeScope.Subtree` to pre-fetch `Name`, `ControlType`, `IsEnabled`, `BoundingRectangle`, `IsKeyboardFocusable`, `HasKeyboardFocus`, `IsPassword`, and `IsOffscreen` in a single cross-process roundtrip.
+   - UIPI elevation check: refuses elevated administrator processes with a clear error message.
+   - Activates local OCR fallback if interactive element count is below threshold.
+3. **Local On-Device OCR** (`HolyHand.Platform/ScreenReading/`):
+   - `WindowsOcrService.cs`: Uses built-in `Windows.Media.Ocr.OcrEngine` and `Windows.Graphics.Imaging.SoftwareBitmap`. Captures bitmap via `Graphics.CopyFromScreen` in memory with zero external dependencies and zero cloud egress.
+4. **Targeted Window Capture** (`HolyHand.Platform/Windowing/`):
+   - Refactored `WindowCaptureService.cs` with `CaptureWindowByProcessName` and `CaptureWindowByProcessId` via `EnumWindows` and `PInvoke.GetWindowRect`.
+5. **CLI Snapshot Subcommand** (`HolyHand.Cli/Program.cs`):
+   - `HolyHand.Cli snapshot [processName|PID]`: captures targeted window or foreground window, runs `UiaScreenReader`, measures elapsed milliseconds, and outputs a formatted table of interactive and OCR elements.
+
+### Test Results
+- Unit and UI test suite (`ScreenReaderTests.cs`):
+  - **RD-01**: Real window live snapshot contains controls with role, label, value, and password redacted (100% passing).
+  - **RD-02**: Node cap (500) and candidate cap (40) enforced; IDs and order 100% stable across identical runs (100% passing).
+  - **RD-03**: Password fields and secret tokens (credit cards, API keys, bearer headers) strictly redacted (100% passing).
+  - **RD-04**: Offscreen elements with zero size filtered; disabled elements flagged/filtered (100% passing).
+  - **RD-06**: Windows OCR on known test bitmap returns text and bounding boxes (100% passing).
+  - **RD-07**: Elevated target processes detected and refused with clear message (100% passing).
+- Total solution tests: **24 passed, 0 failed, 0 skipped**.
+- Build status: **0 Warning(s), 0 Error(s)** under `<TreatWarningsAsErrors>true</TreatWarningsAsErrors>`.
+
+### Graphify Update
+- Updated graph with `ScreenReaderOptions`, `SecretSanitizer`, `ElementRanker`, `WindowsOcrService`, and `UiaScreenReader`.
+
+### Next Step
+- Milestone M5: Agent Loop in Dry-Run (`observe → build candidates → decide (Jev) → risk check → verify → repeat`, loop guard, max steps, action executor with UIA patterns and SendInput fallback, dry-run by default).
+
+
 
 
 

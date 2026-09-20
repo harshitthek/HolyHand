@@ -13,9 +13,14 @@ public interface IWindowCaptureService
 
 public class WindowCaptureService : IWindowCaptureService
 {
-    public unsafe AppTarget? CaptureForegroundWindow()
+    public AppTarget? CaptureForegroundWindow()
     {
         var hwnd = PInvoke.GetForegroundWindow();
+        return CaptureWindowByHwnd(hwnd);
+    }
+
+    public static unsafe AppTarget? CaptureWindowByHwnd(HWND hwnd)
+    {
         if (hwnd == HWND.Null)
         {
             return null;
@@ -46,13 +51,11 @@ public class WindowCaptureService : IWindowCaptureService
             }
             catch
             {
-                // Access denied on elevated/system process
                 isElevated = true;
             }
         }
         catch
         {
-            // Process may have exited or is elevated
             isElevated = true;
         }
 
@@ -95,7 +98,43 @@ public class WindowCaptureService : IWindowCaptureService
         };
     }
 
-    private static bool CheckElevationByProcessAccess(int processId)
+    public static unsafe AppTarget? CaptureWindowByProcessId(int processId)
+    {
+        HWND foundHwnd = HWND.Null;
+        PInvoke.EnumWindows((hwnd, _) =>
+        {
+            uint pid = 0;
+            PInvoke.GetWindowThreadProcessId(hwnd, &pid);
+            if (pid == (uint)processId && PInvoke.IsWindowVisible(hwnd))
+            {
+                foundHwnd = hwnd;
+                return false;
+            }
+            return true;
+        }, 0);
+
+        return foundHwnd != HWND.Null ? CaptureWindowByHwnd(foundHwnd) : null;
+    }
+
+    public static AppTarget? CaptureWindowByProcessName(string processName)
+    {
+        var processes = Process.GetProcessesByName(processName);
+        foreach (var proc in processes)
+        {
+            using (proc)
+            {
+                var target = CaptureWindowByProcessId(proc.Id);
+                if (target != null) return target;
+            }
+        }
+        return null;
+    }
+
+    public static bool IsTargetElevated(int processId) => CheckElevationByProcessAccess(processId);
+
+    public static AppTarget? CaptureCurrentForegroundWindow() => new WindowCaptureService().CaptureForegroundWindow();
+
+    public static bool CheckElevationByProcessAccess(int processId)
     {
         try
         {
