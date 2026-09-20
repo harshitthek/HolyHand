@@ -1,41 +1,41 @@
-# Graph Report - third-hand  (2026-09-21)
+# Graph Report - HolyHand  (2026-09-21)
 
 ## Corpus Check
-- 74 files · ~33,949 words
+- 74 files · ~34,559 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 867 nodes · 1565 edges · 44 communities (40 shown, 4 thin omitted)
+- 872 nodes · 1576 edges · 45 communities (42 shown, 3 thin omitted)
 - Extraction: 93% EXTRACTED · 7% INFERRED · 0% AMBIGUOUS · INFERRED: 112 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `724a8509`
+- Built from commit: `ee748d63`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
 - HolyHand.App.csproj
 - App
-- AppTarget
+- CancellationToken
 - JevClient
 - AppDelegate
-- AgentDecision
-- AccessibilityElement
+- TaskRunner
+- CompletionProtocol
 - ScaffoldTests.cs
-- WindowSnapshot
+- AppKit
 - AXTreeWalker
 - .prepare
 - KeychainHelper
 - PROMPT START
 - 1. Upstream Source Files
 - .run
-- TaskRunner
+- ControllerError
 - 2026-09-21 — M0: Recon and Setup
 - ChordStateMachine
 - PromptPopupWindow
 - .EvaluateAsync
-- AppKit
+- ElectronDetector
 - LowLevelKeyboardHook
 - HolyHand — Architecture Decision Records
 - Third Hand
@@ -53,12 +53,13 @@
 - OverlayPanel
 - HolyHand.Core.Models
 - CoreInterfaces.cs
+- NSRect
 - AppTarget
-- WindowCaptureService.cs
-- render
 - AgentDecision
-- .EvaluateAsync
-- ActionResult
+- AgentDecision
+- AccessibilityElement
+- .ExecuteAsync
+- hotkeyEventCallback
 
 ## God Nodes (most connected - your core abstractions)
 1. `AppDelegate` - 32 edges
@@ -75,19 +76,19 @@
 ## Surprising Connections (you probably didn't know these)
 - `rebuild.sh script` --calls--> `build.sh script`  [EXTRACTED]
   rebuild.sh → Scripts/build.sh
-- `TaskRunner` --calls--> `RunProgress`  [INFERRED]
-  Sources/HolyHand/TaskRunner.swift → Sources/HolyHand/RunProgress.swift
 - `TaskRunner` --references--> `ActionHistory`  [EXTRACTED]
   Sources/HolyHand/TaskRunner.swift → Sources/HolyHand/AgentTypes.swift
 - `AppDelegate` --references--> `HotkeyManager`  [EXTRACTED]
   Sources/HolyHand/AppDelegate.swift → Sources/HolyHand/HotkeyManager.swift
 - `AppDelegate` --references--> `OverlayPanel`  [EXTRACTED]
   Sources/HolyHand/AppDelegate.swift → Sources/HolyHand/OverlayPanel.swift
+- `AppDelegate` --references--> `StatusIndicatorWindow`  [EXTRACTED]
+  Sources/HolyHand/AppDelegate.swift → Sources/HolyHand/StatusIndicatorWindow.swift
 
 ## Import Cycles
 - None detected.
 
-## Communities (44 total, 4 thin omitted)
+## Communities (45 total, 3 thin omitted)
 
 ### Community 0 - "HolyHand.App.csproj"
 Cohesion: 0.07
@@ -97,37 +98,37 @@ Nodes (27): coverlet.collector, FlaUI.UIA3, FluentAssertions, H.NotifyIcon.Wpf, 
 Cohesion: 0.06
 Nodes (21): HolyHand.Core.Common, HolyHand.Cli, EventArgs, ExitEventArgs, IServiceCollection, Mutex, ServiceProvider, StartupEventArgs (+13 more)
 
-### Community 2 - "AppTarget"
-Cohesion: 0.19
-Nodes (11): IntPtr, CancellationToken, IReadOnlyList, Task, TimeSpan, IActionExecutor, IAuditLog, IDecisionModel (+3 more)
+### Community 2 - "CancellationToken"
+Cohesion: 0.27
+Nodes (7): CancellationToken, IReadOnlyList, Task, TimeSpan, IAuditLog, IDecisionModel, IScreenReader
 
 ### Community 3 - "JevClient"
 Cohesion: 0.09
-Nodes (24): Codable, Foundation, ActionHistory, String, JevClient, JevResult, JevServiceError, .errorDescription (+16 more)
+Nodes (23): Foundation, ActionHistory, JevClient, JevResult, JevServiceError, .errorDescription, AccessibilityElement, AgentDecision (+15 more)
 
 ### Community 4 - "AppDelegate"
-Cohesion: 0.14
-Nodes (13): NSApplication, NSApplicationDelegate, NSObject, NSWindow, ObservableObject, AppDelegate, SetupView, .body (+5 more)
+Cohesion: 0.25
+Nodes (7): NSApplicationDelegate, NSObject, ObservableObject, AppDelegate, AppTarget, String, Timer
 
-### Community 5 - "AgentDecision"
+### Community 5 - "TaskRunner"
+Cohesion: 0.09
+Nodes (27): AnyObject, ActionVerification, ObservationState, RunProgress, AccessibilityElement, AgentDecision, Bool, Set (+19 more)
+
+### Community 6 - "CompletionProtocol"
 Cohesion: 0.11
-Nodes (19): Equatable, AgentDecision, Double, ActionVerification, ObservationState, RunProgress, AccessibilityElement, AgentDecision (+11 more)
-
-### Community 6 - "AccessibilityElement"
-Cohesion: 0.06
-Nodes (21): ApplicationServices, AccessibilityElement, .displayLabel, .displayRole, .isOutcomeEvidence, AXUIElement, Bool, CGRect (+13 more)
+Nodes (9): CompletionProtocol, RejectedRequestProtocol, Bool, URLRequest, TextOnlyProtocol, Bool, URLRequest, TextSelectionProtocol (+1 more)
 
 ### Community 7 - "ScaffoldTests.cs"
 Cohesion: 0.40
 Nodes (3): HolyHand.Tests, Fact, ScaffoldTests
 
-### Community 8 - "WindowSnapshot"
-Cohesion: 0.09
-Nodes (17): ScreenCaptureKit, AccessibilityElement, CGImage, CGRect, pid_t, VisionObserver, CGImage, CGPoint (+9 more)
+### Community 8 - "AppKit"
+Cohesion: 0.06
+Nodes (29): App, AppKit, ApplicationServices, CGFloat, NSRunningApplication, Scene, ScreenCaptureKit, render() (+21 more)
 
 ### Community 9 - "AXTreeWalker"
-Cohesion: 0.17
-Nodes (11): Date, AXTreeWalker, AccessibilityElement, AnyObject, AppTarget, AXUIElement, Bool, Int (+3 more)
+Cohesion: 0.13
+Nodes (13): Date, AXTreeWalker, AccessibilityElement, AnyObject, AppTarget, AXUIElement, Bool, Int (+5 more)
 
 ### Community 10 - ".prepare"
 Cohesion: 0.11
@@ -149,13 +150,13 @@ Nodes (19): 1.1 App Shell & Lifecycle, 1.2 Hotkey & Input, 1.3 UI, 1.4 Screen Re
 Cohesion: 0.14
 Nodes (14): CheckedContinuation, Error, MainActor, Result, AsyncTimeout, Race, Never, String (+6 more)
 
-### Community 15 - "TaskRunner"
-Cohesion: 0.06
-Nodes (48): AnyObject, CGKeyCode, Character, Decodable, Int32, ControllerError, .errorDescription, invalid (+40 more)
+### Community 15 - "ControllerError"
+Cohesion: 0.08
+Nodes (32): CGKeyCode, Character, Decodable, Int32, ControllerError, .errorDescription, invalid, AccessibilityElement (+24 more)
 
 ### Community 16 - "2026-09-21 — M0: Recon and Setup"
-Cohesion: 0.09
-Nodes (22): 2026-09-21 — M0: Recon and Setup, 2026-09-21 — M1: Scaffold, 2026-09-21 — M2: Hotkey and Popup, Components Built, Files Created, Files Read (upstream), Graphify, Graphify Update (+14 more)
+Cohesion: 0.07
+Nodes (27): 2026-09-21 — M0: Recon and Setup, 2026-09-21 — M1: Scaffold, 2026-09-21 — M2: Hotkey and Popup, 2026-09-21 — M3: Jev Client via Vercel AI Gateway, Components Built, Components Built, Files Created, Files Read (upstream) (+19 more)
 
 ### Community 17 - "ChordStateMachine"
 Cohesion: 0.14
@@ -166,12 +167,12 @@ Cohesion: 0.13
 Nodes (17): KeyEventArgs, RoutedEventArgs, TextChangedEventArgs, CloseButton, ElevatedBadge, MicButton, PlaceholderText, PromptInput (+9 more)
 
 ### Community 19 - ".EvaluateAsync"
-Cohesion: 0.07
-Nodes (29): HolyHand.Tests.Jev, HolyHand.Core.Jev, Exception, HttpClient, JsonElement, JsonSerializerOptions, List, CancellationToken (+21 more)
+Cohesion: 0.06
+Nodes (32): HolyHand.Tests.Jev, HolyHand.Core.Jev, Exception, HttpClient, JsonElement, JsonSerializerOptions, List, CancellationToken (+24 more)
 
-### Community 20 - "AppKit"
-Cohesion: 0.09
-Nodes (19): App, AppKit, CGEventTapProxy, CGEventType, CoreGraphics, Scene, ElectronDetector, AppTarget (+11 more)
+### Community 20 - "ElectronDetector"
+Cohesion: 0.31
+Nodes (6): ElectronDetector, AppTarget, Bool, Int, pid_t, String
 
 ### Community 21 - "LowLevelKeyboardHook"
 Cohesion: 0.10
@@ -206,20 +207,20 @@ Cohesion: 0.16
 Nodes (4): JevTests, AccessibilityElement, Int, String
 
 ### Community 32 - "StatusIndicatorWindow"
-Cohesion: 0.18
-Nodes (10): NSHostingView, NSPanel, StatusIndicatorWindow, StatusView, .body, .message, AppTarget, Bool (+2 more)
+Cohesion: 0.20
+Nodes (9): NSHostingView, StatusIndicatorWindow, StatusView, .body, .message, AppTarget, Bool, String (+1 more)
 
 ### Community 33 - "JevDecisionModel"
 Cohesion: 0.21
 Nodes (9): CancellationToken, Dictionary, ILogger, IReadOnlyList, Task, JevDecisionModel, IReadOnlyList, Rectangle (+1 more)
 
 ### Community 34 - ".info"
-Cohesion: 0.16
-Nodes (9): CFMachPort, CFRunLoopSource, Notification, HotkeyManager, .isRunning, Bool, Void, Log (+1 more)
+Cohesion: 0.19
+Nodes (8): CFMachPort, CFRunLoopSource, Notification, HotkeyManager, .isRunning, Bool, Void, String
 
 ### Community 35 - "OverlayPanel"
-Cohesion: 0.27
-Nodes (10): OverlayInputView, .body, OverlayPanel, .canBecomeKey, Any, AppTarget, Bool, NSImage (+2 more)
+Cohesion: 0.22
+Nodes (11): NSPanel, OverlayInputView, .body, OverlayPanel, .canBecomeKey, Any, AppTarget, Bool (+3 more)
 
 ### Community 36 - "HolyHand.Core.Models"
 Cohesion: 0.20
@@ -229,45 +230,53 @@ Nodes (5): HolyHand.App, HolyHand.Platform.Hotkey, HolyHand.App.Windows, HolyHan
 Cohesion: 0.18
 Nodes (6): IDisposable, DateTimeOffset, IClock, ICredentialStore, IHotkeyService, ISpeechInput
 
-### Community 38 - "AppTarget"
+### Community 38 - "NSRect"
+Cohesion: 0.19
+Nodes (7): NSApplication, NSRect, NSWindow, SetupView, .body, Bool, View
+
+### Community 39 - "AppTarget"
 Cohesion: 0.27
-Nodes (7): NSRect, NSRunningApplication, AppTarget, AXUIElement, NSImage, pid_t, String
+Nodes (6): HolyHand.Platform.Windowing, IntPtr, Rectangle, AppTarget, IWindowCaptureService, WindowCaptureService
 
-### Community 39 - "WindowCaptureService.cs"
-Cohesion: 0.38
-Nodes (3): HolyHand.Platform.Windowing, IWindowCaptureService, WindowCaptureService
-
-### Community 40 - "render"
-Cohesion: 0.40
-Nodes (4): CGFloat, render(), Data, Int
+### Community 40 - "AgentDecision"
+Cohesion: 0.11
+Nodes (15): Codable, Equatable, AgentDecision, Double, pid_t, CGImage, CGPoint, CGRect (+7 more)
 
 ### Community 41 - "AgentDecision"
 Cohesion: 0.50
 Nodes (3): IRiskPolicy, AgentDecision, AgentOperation
 
-### Community 42 - ".EvaluateAsync"
-Cohesion: 0.40
-Nodes (3): CancellationToken, Task, IJevClient
+### Community 42 - "AccessibilityElement"
+Cohesion: 0.20
+Nodes (9): AccessibilityElement, .displayLabel, .displayRole, .isOutcomeEvidence, AXUIElement, Bool, CGRect, Int (+1 more)
+
+### Community 43 - ".ExecuteAsync"
+Cohesion: 0.47
+Nodes (3): IActionExecutor, TimeSpan, ActionResult
+
+### Community 44 - "hotkeyEventCallback"
+Cohesion: 0.22
+Nodes (7): CGEventTapProxy, CGEventType, CoreGraphics, hotkeyEventCallback(), CGEvent, Unmanaged, UnsafeMutableRawPointer
 
 ## Knowledge Gaps
-- **129 isolated node(s):** `PackageDescription`, `notarize.sh script`, `.isOutcomeEvidence`, `.displayRole`, `.displayLabel` (+124 more)
+- **133 isolated node(s):** `PackageDescription`, `notarize.sh script`, `.isOutcomeEvidence`, `.displayRole`, `.displayLabel` (+128 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **4 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **3 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `TaskRunner` connect `TaskRunner` to `StatusIndicatorWindow`, `JevClient`, `AppDelegate`, `AgentDecision`?**
-  _High betweenness centrality (0.046) - this node is a cross-community bridge._
-- **Why does `AppDelegate` connect `AppDelegate` to `StatusIndicatorWindow`, `.info`, `OverlayPanel`, `AppTarget`, `TaskRunner`?**
-  _High betweenness centrality (0.043) - this node is a cross-community bridge._
-- **Why does `ControllerError` connect `TaskRunner` to `JevClient`, `WindowSnapshot`, `.prepare`, `KeychainHelper`, `.run`?**
+- **Why does `TaskRunner` connect `TaskRunner` to `StatusIndicatorWindow`, `JevClient`, `AppDelegate`, `ControllerError`?**
+  _High betweenness centrality (0.045) - this node is a cross-community bridge._
+- **Why does `AppDelegate` connect `AppDelegate` to `StatusIndicatorWindow`, `.info`, `OverlayPanel`, `TaskRunner`, `NSRect`, `AppKit`?**
+  _High betweenness centrality (0.042) - this node is a cross-community bridge._
+- **Why does `ControllerError` connect `ControllerError` to `JevClient`, `TaskRunner`, `AgentDecision`, `.prepare`, `KeychainHelper`, `.run`?**
   _High betweenness centrality (0.040) - this node is a cross-community bridge._
 - **Are the 14 inferred relationships involving `AgentDecision` (e.g. with `.testOCRLabelsCannotBecomeClickTargetsWithoutVisualGrounding()` and `.testOCRTextUsesExplicitClickTextRatherThanPretendingToBeAButton()`) actually correct?**
   _`AgentDecision` has 14 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 5 inferred relationships involving `JevClient` (e.g. with `.runLoop()` and `.testCompletionCheckDoesNotAskForAnotherAction()`) actually correct?**
   _`JevClient` has 5 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `PackageDescription`, `notarize.sh script`, `.isOutcomeEvidence` to the rest of the system?**
-  _129 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _133 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `HolyHand.App.csproj` be split into smaller, more focused modules?**
   _Cohesion score 0.06722689075630252 - nodes in this community are weakly interconnected._
