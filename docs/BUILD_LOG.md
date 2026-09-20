@@ -155,7 +155,14 @@ Supporting files: `README.md`, `Package.swift`, `LICENSE`, `rebuild.sh`
   - **Surprising connections**: `App` --inherits--> `Application`, `SystemClock` --implements--> `IClock`.
   - Updated `graphify-out/GRAPH_REPORT.md`.
 
+### Project Renaming
+- Per user instruction, renamed all projects, files, and namespaces from `HolyHand` to `HolyHand` (`HolyHand.sln`, `HolyHand.Core`, `HolyHand.Platform`, `HolyHand.App`, `HolyHand.Cli`, `HolyHand.Tests`).
+- Clean build succeeded: 0 warnings, 0 errors.
+- Tests passed: 1 passed, 0 failed.
+- Graphify re-extracted: 676 nodes, 1247 edges, 30 communities.
+
 ### Next Step
-- Milestone M2: Core Logic (pure C# port of RunProgress, TextEntryPlan, TextExtractor, TextFieldFocus, and ChordStateMachine).
+- Milestone M2: Core Logic (pure C# port of RunProgress, TextEntryPlan, TextExtractor, TextFieldFocus, and ChordStateMachine under `HolyHand.Core`).
+
 
 
