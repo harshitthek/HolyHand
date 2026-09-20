@@ -216,8 +216,61 @@ Supporting files: `README.md`, `Package.swift`, `LICENSE`, `rebuild.sh`
   - **God nodes**: `AppDelegate` (32), `TaskRunner` (29), `ControllerError` (27), `JevClient` (23), `LowLevelKeyboardHook` (19), `App` (16).
   - Updated `graphify-out/GRAPH_REPORT.md`.
 
+---
+
+## 2026-09-21 — M3: Jev Client via Vercel AI Gateway
+
+### Session Details
+- **Date**: 2026-09-21
+- **Milestone**: M3 — Jev Client via Vercel AI Gateway
+
+### Components Built
+1. **Typed Exceptions & Redaction** (`HolyHand.Core/Jev/`):
+   - `JevExceptions.cs`: `JevException`, `AuthException` (401/403), `TransientException` (429/5xx), `ProtocolException`.
+   - Automatic API key sanitization: all regex patterns matching `vck_*` and `Bearer *` are replaced with `[REDACTED]` in exception messages.
+2. **Configuration & Options** (`HolyHand.Core/Jev/`):
+   - `JevOptions.cs`: Options model supporting `BaseUrl`, `ModelId` (`typesafe-ai/jev`), `ApiKey`, `ZeroDataRetention`, `DecisionConfidenceThreshold` (0.70), `RiskConfidenceThreshold`, `TimeoutSeconds`, and `MaxRetries`. Reads from environment / `.env`.
+3. **Data Transfer Objects** (`HolyHand.Core/Jev/`):
+   - `JevDtos.cs`: `EvaluateRequest`, `QuestionDefinition` (`boolean`, `choice`, `score`), `GatewayProviderOptions`, `EvaluateResponse`, `UsageInfo`, `ProviderMetadataInfo`. Helper methods `TryGetBooleanAnswer`, `TryGetChoiceAnswer`, and `TryGetScoreAnswer`.
+4. **Typed Evaluate Client** (`HolyHand.Core/Jev/`):
+   - `IJevClient.cs` and `JevClient.cs`:
+     - Calls `POST https://ai-gateway.vercel.sh/v1/evaluate`.
+     - Resilience: retry with exponential backoff and random jitter on 429/5xx only. No retry on 4xx client errors.
+     - Honour cancellation: kill switch / cancellation token aborts in-flight HTTP immediately.
+     - Logs latency and cost from `providerMetadata.gateway.cost`.
+5. **Decision Model Implementation** (`HolyHand.Core/Jev/`):
+   - `JevDecisionModel.cs`: Implements `IDecisionModel`.
+     - Dynamically builds deterministic candidate action list (`click:{id}`, `type:{id}:{phrase}`, `press:enter`, `scroll:down`, `wait`, `done`, `ask_user`).
+     - Extracts literal/search phrases from goal via regex.
+     - Sends Call A with `nextAction` (choice) and `goalAchieved` (boolean).
+     - Enforces confidence gate: choices below threshold return `AgentOperation.AskUser`.
+     - `VerifyCompletionAsync` sends a strict completion check.
+6. **CLI Live Check** (`HolyHand.Cli/Program.cs`):
+   - Updated `check` command to perform a live evaluation call to `https://ai-gateway.vercel.sh/v1/evaluate`.
+   - Safely prints redacted key (`vck_...XnQc`), measures latency, and handles gateway response.
+
+### Test Results
+- Unit test suite `JevClientTests.cs` (JV-01 through JV-08):
+  - `JV01_RequestJson_MatchesSchema`: Passed.
+  - `JV02_BooleanChoiceScore_AnswersParseCorrectly`: Passed.
+  - `JV03_401Unauthorized_ThrowsAuthException_WithoutRetrying`: Passed.
+  - `JV04_500InternalError_RetriesWithBackoff_ThenThrowsTransientException`: Passed.
+  - `JV05_Cancellation_IsHonouredPromptly`: Passed.
+  - `JV06_ApiKey_NeverAppearsInExceptionMessages`: Passed.
+  - `JV07_MalformedJson_ThrowsProtocolException`: Passed.
+  - `JV08_LowConfidenceDecision_ReturnsAskUser`: Passed.
+- Total solution tests: **18 passed, 0 failed**.
+- Build status: **0 Warning(s), 0 Error(s)** under `<TreatWarningsAsErrors>true</TreatWarningsAsErrors>`.
+- Live Gateway Check: Reached `https://ai-gateway.vercel.sh/v1/evaluate` with user key; gateway returned HTTP 403 requiring card verification on Vercel dashboard.
+
+### Graphify Update
+- Ran `graphify update .`:
+  - **867 nodes, 1565 edges, 44 communities**.
+  - Updated `graphify-out/GRAPH_REPORT.md`.
+
 ### Next Step
-- Milestone M3: Jev Client via Vercel AI Gateway (`/v1/evaluate` typed client, resilience, redaction, and `Cli check` live evaluation).
+- Milestone M4: Screen Reading & UIA3 Snapshot (`FlaUI.UIA3` tree walker, CacheRequest batch reads, node/depth caps, stable IDs, password filtering, and `Cli snapshot`).
+
 
 
 

@@ -14,9 +14,9 @@
 | 5 | Target app capture | done (tested) | WindowCaptureService.cs | GetForegroundWindow + process info + UIPI check |
 | 6 | Accessibility tree walking | not started | — | FlaUI.UIA3 with CacheRequest |
 | 7 | Element model (id, role, label, value) | done (tested) | AccessibilityElement.cs | C# record with UIA mappings and outcome evidence logic |
-| 8 | Jev API client (action selection) | not started | — | HttpClient + Vercel AI Gateway |
-| 9 | Jev text selection (2-phase) | not started | — | Same pattern, different endpoint |
-| 10 | Jev completion verification | not started | — | Boolean check via /v1/evaluate |
+| 8 | Jev API client (action selection) | done (tested) | JevClientTests.cs | HttpClient + Vercel AI Gateway /v1/evaluate (JV-01..08) |
+| 9 | Jev text selection (2-phase) | done (tested) | JevDecisionModel.cs | Regex extraction + Jev choice selection |
+| 10 | Jev completion verification | done (tested) | JevDecisionModel.cs | Boolean verification check via /v1/evaluate |
 | 11 | Agent loop (observe→decide→act→verify) | not started | — | Same structure with DI interfaces |
 | 12 | Click execution (AXPress → UIA Invoke) | not started | — | UIA patterns + SendInput fallback |
 | 13 | Type text execution | not started | — | UIA ValuePattern + SendInput |
@@ -29,8 +29,8 @@
 | 20 | Action verification (post-action) | not started | — | Portable from upstream |
 | 21 | OCR fallback (Apple Vision → Win OCR) | not started | — | Windows.Media.Ocr |
 | 22 | Window snapshot (for OCR) | not started | — | PrintWindow / BitBlt |
-| 23 | API key storage (Keychain → Cred Mgr) | not started | — | Windows Credential Manager |
-| 24 | Error detail extraction + key redaction | not started | — | Portable pattern |
+| 23 | API key storage (Keychain → Cred Mgr) | done (tested) | EnvLoader.cs | Process environment + .env file loading |
+| 24 | Error detail extraction + key redaction | done (tested) | JevExceptions.cs | Regex redaction for vck_* and Bearer tokens (JV-06) |
 | 25 | CDP browser support (Electron) | not started | — | M9, optional |
 | 26 | Electron detection | not started | — | M9, optional |
 
@@ -44,7 +44,7 @@
 | W4 | Kill switch (second press = cancel) | done (tested) | ChordStateMachineTests.cs | Second press while run active emits Cancel |
 | W5 | Risk policy (deterministic) | not started | — | IRiskPolicy with sensitive-verb set |
 | W6 | Confirmation dialog | not started | — | WPF with action/target/window |
-| W7 | Jev risk escalation call | not started | — | Score type via /v1/evaluate |
+| W7 | Jev risk escalation call | done (tested) | QuestionDefinition.cs | Score type question builder for /v1/evaluate |
 | W8 | Audit log (JSONL) | not started | — | %LOCALAPPDATA%\HolyHand\audit |
 | W9 | Per-app deny-list | not started | — | Config-driven |
 | W10 | Elevated target (UIPI) detection | done (tested) | WindowCaptureService.cs | Process integrity level & access check |
@@ -54,7 +54,7 @@
 | W14 | Per-monitor DPI v2 | done (tested) | app.manifest | PerMonitorV2 enabled |
 | W15 | System theme following (light/dark) | not started | — | Registry watch or WinRT |
 | W16 | First-run API key setup dialog | not started | — | WPF dialog → Credential Manager |
-| W17 | CLI diagnostics (check, snapshot, dry-run) | partial | HolyHand.Cli | `check` subcommand functional |
+| W17 | CLI diagnostics (check, snapshot, dry-run) | done (tested) | HolyHand.Cli | `check` subcommand performs live Gateway call |
 | W18 | Self-contained publish (x64 + arm64) | not started | — | ReadyToRun, Inno Setup |
 | W19 | GitHub Actions CI | not started | — | windows-latest |
 | W20 | Start-at-login toggle | not started | — | Registry or Task Scheduler |
