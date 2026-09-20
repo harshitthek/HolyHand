@@ -8,10 +8,10 @@
 | # | Capability | Status | Evidence | Notes |
 |---|---|---|---|---|
 | 1 | Menu bar / tray icon | not started | — | WPF + H.NotifyIcon.Wpf |
-| 2 | Hotkey trigger (Ctrl+Space → Ctrl+Win) | not started | — | Low-level hook + state machine |
-| 3 | Text input overlay/popup | not started | — | WPF borderless topmost window |
+| 2 | Hotkey trigger (Ctrl+Space → Ctrl+Win) | done (tested) | ChordStateMachineTests.cs | Low-level hook + pure state machine (HK-01..07) |
+| 3 | Text input overlay/popup | done (tested) | PromptPopupWindow.xaml | WPF borderless topmost window (<200ms show) |
 | 4 | Status indicator (floating) | not started | — | WPF floating panel |
-| 5 | Target app capture | not started | — | GetForegroundWindow + process info |
+| 5 | Target app capture | done (tested) | WindowCaptureService.cs | GetForegroundWindow + process info + UIPI check |
 | 6 | Accessibility tree walking | not started | — | FlaUI.UIA3 with CacheRequest |
 | 7 | Element model (id, role, label, value) | done (tested) | AccessibilityElement.cs | C# record with UIA mappings and outcome evidence logic |
 | 8 | Jev API client (action selection) | not started | — | HttpClient + Vercel AI Gateway |
@@ -38,16 +38,16 @@
 
 | # | Capability | Status | Evidence | Notes |
 |---|---|---|---|---|
-| W1 | Ctrl+Win modifier-only chord | not started | — | Pure state machine in Core |
-| W2 | Start menu suppression | not started | — | VK 0xE8 injection |
+| W1 | Ctrl+Win modifier-only chord | done (tested) | ChordStateMachineTests.cs | Pure state machine in Core (HK-01..07) |
+| W2 | Start menu suppression | done (tested) | LowLevelKeyboardHook.cs | VK 0xE8 injection before Win release |
 | W3 | Fallback hotkey (Ctrl+Alt+Space) | not started | — | RegisterHotKey |
-| W4 | Kill switch (second press = cancel) | not started | — | State machine + coordinator |
+| W4 | Kill switch (second press = cancel) | done (tested) | ChordStateMachineTests.cs | Second press while run active emits Cancel |
 | W5 | Risk policy (deterministic) | not started | — | IRiskPolicy with sensitive-verb set |
 | W6 | Confirmation dialog | not started | — | WPF with action/target/window |
 | W7 | Jev risk escalation call | not started | — | Score type via /v1/evaluate |
 | W8 | Audit log (JSONL) | not started | — | %LOCALAPPDATA%\HolyHand\audit |
 | W9 | Per-app deny-list | not started | — | Config-driven |
-| W10 | Elevated target (UIPI) detection | not started | — | Process integrity level check |
+| W10 | Elevated target (UIPI) detection | done (tested) | WindowCaptureService.cs | Process integrity level & access check |
 | W11 | Voice input (Whisper.net) | not started | — | NAudio + whisper.cpp |
 | W12 | Dry-run mode (default) | not started | — | Print actions, execute nothing |
 | W13 | Single-instance guard | done (tested) | App.xaml.cs | Global Named Mutex |

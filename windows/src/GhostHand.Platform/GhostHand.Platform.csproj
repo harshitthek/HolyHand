@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <None Include="..\..\NativeMethods.txt" Link="NativeMethods.txt" />
+    <None Include="..\..\NativeMethods.json" Link="NativeMethods.json" />
   </ItemGroup>
 
 </Project>

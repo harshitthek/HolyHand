@@ -161,8 +161,64 @@ Supporting files: `README.md`, `Package.swift`, `LICENSE`, `rebuild.sh`
 - Tests passed: 1 passed, 0 failed.
 - Graphify re-extracted: 676 nodes, 1247 edges, 30 communities.
 
+---
+
+## 2026-09-21 — M2: Hotkey and Popup
+
+### Session Details
+- **Date**: 2026-09-21
+- **Milestone**: M2 — Hotkey and Popup
+
+### Components Built
+1. **Pure Chord State Machine** (`HolyHand.Core/Hotkey/`):
+   - `RawKeyEvent.cs`: Struct representing keydown/keyup, keycode, injected flag, and timestamp.
+   - `ChordStateMachine.cs`: Pure state machine for `Ctrl+Win` chord.
+     - Detects when both Ctrl and Win are held and one is released without intervening keys.
+     - Auto-repeat protection (repeats do not re-arm or double-fire).
+     - Intervening key protection (`Ctrl+Win+D` cancels the chord).
+     - Injected event protection (`IsInjected = true` is ignored).
+     - Kill switch: Triggering while `IsRunActive` emits `OnCancel`. Esc key while running emits `OnCancel`.
+2. **Low-Level Keyboard Hook** (`HolyHand.Platform/Hotkey/`):
+   - `LowLevelKeyboardHook.cs`: Installs `WH_KEYBOARD_LL` hook on dedicated background thread with Win32 message loop.
+   - Non-blocking callback: enqueues to `Channel<RawKeyEvent>` and immediately returns `CallNextHookEx`.
+   - Start menu suppression: injects unassigned `VK 0xE8` tap via `SendInput` before Win key release passes through.
+3. **Foreground Window Capture & UIPI Check** (`HolyHand.Platform/Windowing/`):
+   - `WindowCaptureService.cs`: Captures HWND via `GetForegroundWindow`, queries process ID, process name, window title, and bounds.
+   - UIPI elevation check: inspects process access and security token to detect elevated targets (refusing automation with a clear message).
+4. **WPF Popup Window** (`HolyHand.App/Windows/`):
+   - `PromptPopupWindow.xaml` + `PromptPopupWindow.xaml.cs`:
+     - Borderless, topmost, pre-created and hidden at startup for instant (< 200 ms) activation.
+     - Modern dark glass styling with target application pill and elevated warning badge.
+     - Text input with auto-focus, status line, mic button stub, Send button, and close button.
+     - Keyboard navigation: Enter submits, Esc cancels. Controls have `AutomationProperties.Name`.
+5. **App Composition Root** (`HolyHand.App/App.xaml.cs`):
+   - DI registration for `WindowCaptureService` and `LowLevelKeyboardHook`.
+   - Wires hotkey trigger to capture foreground window and show popup.
+   - Wires kill switch to cancel and dismiss popup.
+
+### Test Results
+- Unit tests in `ChordStateMachineTests.cs` covering HK-01 through HK-07:
+  - `HK01_CtrlDown_WinDown_WinUp_FiresExactlyOnce`: Passed.
+  - `HK01_WinDown_CtrlDown_CtrlUp_FiresExactlyOnce`: Passed.
+  - `HK02_CtrlWinD_InterveningKey_DoesNotFire`: Passed.
+  - `HK03_CtrlAlone_Or_WinAlone_DoesNotFire`: Passed.
+  - `HK04_LeftAndRightModifierVariants_BothWork`: Passed.
+  - `HK05_InjectedEvents_AreIgnored`: Passed.
+  - `HK06_TriggerWhileRunActive_EmitsCancelNotShow`: Passed.
+  - `HK06_EscapeWhileRunActive_EmitsCancel`: Passed.
+  - `HK07_KeyAutoRepeat_DoesNotDoubleFire`: Passed.
+- Total tests: **10 passed, 0 failed, 0 skipped**.
+- Build status: **0 Warning(s), 0 Error(s)** under `<TreatWarningsAsErrors>true</TreatWarningsAsErrors>`.
+
+### Graphify Update
+- Ran `graphify update .`:
+  - **789 nodes, 1444 edges, 31 communities**.
+  - **God nodes**: `AppDelegate` (32), `TaskRunner` (29), `ControllerError` (27), `JevClient` (23), `LowLevelKeyboardHook` (19), `App` (16).
+  - Updated `graphify-out/GRAPH_REPORT.md`.
+
 ### Next Step
-- Milestone M2: Core Logic (pure C# port of RunProgress, TextEntryPlan, TextExtractor, TextFieldFocus, and ChordStateMachine under `HolyHand.Core`).
+- Milestone M3: Jev Client via Vercel AI Gateway (`/v1/evaluate` typed client, resilience, redaction, and `Cli check` live evaluation).
+
 
 
 
