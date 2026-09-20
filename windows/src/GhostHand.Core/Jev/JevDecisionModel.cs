@@ -67,7 +67,7 @@ public class JevDecisionModel : IDecisionModel
             {
                 Gateway = new GatewayOptions
                 {
-                    ZeroDataRetention = _options.ZeroDataRetention,
+                    ZeroDataRetention = _options.ZeroDataRetention ? true : null,
                     Only = new List<string> { "typesafe-ai" }
                 }
             }
@@ -137,7 +137,7 @@ public class JevDecisionModel : IDecisionModel
             },
             ProviderOptions = new GatewayProviderOptions
             {
-                Gateway = new GatewayOptions { ZeroDataRetention = _options.ZeroDataRetention }
+                Gateway = new GatewayOptions { ZeroDataRetention = _options.ZeroDataRetention ? true : null }
             }
         };
 

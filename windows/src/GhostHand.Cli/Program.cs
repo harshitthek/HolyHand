@@ -88,7 +88,7 @@ public static class Program
             {
                 Gateway = new GatewayOptions
                 {
-                    ZeroDataRetention = options.ZeroDataRetention,
+                    ZeroDataRetention = options.ZeroDataRetention ? true : null,
                     Only = new List<string> { "typesafe-ai" }
                 }
             }

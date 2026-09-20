@@ -59,7 +59,7 @@ public record GatewayProviderOptions
 public record GatewayOptions
 {
     [JsonPropertyName("zeroDataRetention")]
-    public bool ZeroDataRetention { get; init; } = true;
+    public bool? ZeroDataRetention { get; init; }
 
     [JsonPropertyName("only")]
     public List<string>? Only { get; init; }
@@ -75,6 +75,9 @@ public record EvaluateResponse
 
     [JsonPropertyName("providerMetadata")]
     public ProviderMetadataInfo? ProviderMetadata { get; init; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? AdditionalData { get; init; }
 
     public bool TryGetBooleanAnswer(string questionName, out double probability, out bool isTrue)
     {
@@ -163,18 +166,46 @@ public record UsageInfo
 
     [JsonPropertyName("totalTokens")]
     public int TotalTokens { get; init; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? AdditionalData { get; init; }
 }
 
 public record ProviderMetadataInfo
 {
     [JsonPropertyName("gateway")]
     public GatewayMetadata? Gateway { get; init; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? AdditionalData { get; init; }
 }
 
 public record GatewayMetadata
 {
     [JsonPropertyName("cost")]
-    public double? Cost { get; init; }
+    public JsonElement? RawCost { get; init; }
+
+    [JsonIgnore]
+    public double? Cost
+    {
+        get
+        {
+            if (RawCost == null || RawCost.Value.ValueKind == JsonValueKind.Null || RawCost.Value.ValueKind == JsonValueKind.Undefined)
+                return null;
+            if (RawCost.Value.ValueKind == JsonValueKind.Number && RawCost.Value.TryGetDouble(out var d))
+                return d;
+            if (RawCost.Value.ValueKind == JsonValueKind.String && double.TryParse(RawCost.Value.GetString(), System.Globalization.CultureInfo.InvariantCulture, out var parsed))
+                return parsed;
+            return null;
+        }
+        init
+        {
+            if (value.HasValue)
+            {
+                RawCost = JsonSerializer.SerializeToElement(value.Value);
+            }
+        }
+    }
 
     [JsonPropertyName("provider")]
     public string? Provider { get; init; }
@@ -182,6 +213,12 @@ public record GatewayMetadata
     [JsonPropertyName("model")]
     public string? Model { get; init; }
 
+    [JsonPropertyName("generationId")]
+    public string? GenerationId { get; init; }
+
     [JsonPropertyName("routing")]
-    public string? Routing { get; init; }
+    public JsonElement? Routing { get; init; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? AdditionalData { get; init; }
 }

@@ -14,7 +14,7 @@
 | 5 | Target app capture | done (tested) | WindowCaptureService.cs | GetForegroundWindow + process info + UIPI check |
 | 6 | Accessibility tree walking | not started | — | FlaUI.UIA3 with CacheRequest |
 | 7 | Element model (id, role, label, value) | done (tested) | AccessibilityElement.cs | C# record with UIA mappings and outcome evidence logic |
-| 8 | Jev API client (action selection) | done (tested) | JevClientTests.cs | HttpClient + Vercel AI Gateway /v1/evaluate (JV-01..08) |
+| 8 | Jev API client (action selection) | done (tested) | JevClientTests.cs, Cli check | HttpClient + Vercel AI Gateway /v1/evaluate (JV-01..09 live verified: 843ms, $0) |
 | 9 | Jev text selection (2-phase) | done (tested) | JevDecisionModel.cs | Regex extraction + Jev choice selection |
 | 10 | Jev completion verification | done (tested) | JevDecisionModel.cs | Boolean verification check via /v1/evaluate |
 | 11 | Agent loop (observe→decide→act→verify) | not started | — | Same structure with DI interfaces |
@@ -54,7 +54,7 @@
 | W14 | Per-monitor DPI v2 | done (tested) | app.manifest | PerMonitorV2 enabled |
 | W15 | System theme following (light/dark) | not started | — | Registry watch or WinRT |
 | W16 | First-run API key setup dialog | not started | — | WPF dialog → Credential Manager |
-| W17 | CLI diagnostics (check, snapshot, dry-run) | done (tested) | HolyHand.Cli | `check` subcommand performs live Gateway call |
+| W17 | CLI diagnostics (check, snapshot, dry-run) | done (tested) | HolyHand.Cli | `check` subcommand performs live Gateway call (verified 843ms, $0 cost) |
 | W18 | Self-contained publish (x64 + arm64) | not started | — | ReadyToRun, Inno Setup |
 | W19 | GitHub Actions CI | not started | — | windows-latest |
 | W20 | Start-at-login toggle | not started | — | Registry or Task Scheduler |

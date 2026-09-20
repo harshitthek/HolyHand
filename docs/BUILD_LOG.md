@@ -261,7 +261,26 @@ Supporting files: `README.md`, `Package.swift`, `LICENSE`, `rebuild.sh`
   - `JV08_LowConfidenceDecision_ReturnsAskUser`: Passed.
 - Total solution tests: **18 passed, 0 failed**.
 - Build status: **0 Warning(s), 0 Error(s)** under `<TreatWarningsAsErrors>true</TreatWarningsAsErrors>`.
-- Live Gateway Check: Reached `https://ai-gateway.vercel.sh/v1/evaluate` with user key; gateway returned HTTP 403 requiring card verification on Vercel dashboard.
+- Live Gateway Check: Reached `https://ai-gateway.vercel.sh/v1/evaluate` with user key.
+  - Initial run: Gateway requested card verification for free credits. User verified card on Vercel dashboard.
+  - Follow-up run: Gateway reported `Zero Data Retention (ZDR) is only available for Pro and Enterprise plans. Current plan: hobby.`
+  - Resolution per AGENTS.md §5.1: Set `ZeroDataRetention = false` by default, made `zeroDataRetention` nullable and omitted when disabled.
+  - Serializer hardening: Updated `GatewayMetadata.Routing` to `JsonElement?` (gateway returns nested routing object) and `Cost` to resilient string/number parser with `[JsonExtensionData]` on all DTOs.
+  - **Live Verification Result (JV-09)**: ✅ **SUCCESS**!
+    ```
+    Testing live Jev model via Vercel AI Gateway...
+      Gateway Base URL: https://ai-gateway.vercel.sh
+      Model: typesafe-ai/jev
+      Zero Data Retention: False
+
+    [SUCCESS] Jev evaluation call returned successfully!
+      Latency: 843ms
+      Answer 'operational': False (probability: 31.0%)
+      Tokens: 0 (Prompt: 0, Completion: 0)
+      Cost: $0.000000
+
+    All diagnostic checks passed. Your API key and Gateway connection are fully verified.
+    ```
 
 ### Graphify Update
 - Ran `graphify update .`:

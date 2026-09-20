@@ -5,7 +5,7 @@ public class JevOptions
     public string BaseUrl { get; set; } = "https://ai-gateway.vercel.sh";
     public string ModelId { get; set; } = "typesafe-ai/jev";
     public string? ApiKey { get; set; }
-    public bool ZeroDataRetention { get; set; } = true;
+    public bool ZeroDataRetention { get; set; } = false;
     public int TimeoutSeconds { get; set; } = 30;
     public int MaxRetries { get; set; } = 3;
     public double DecisionConfidenceThreshold { get; set; } = 0.70;
