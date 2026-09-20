@@ -1,0 +1,57 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{C8BDDB9E-D030-4772-A60A-9ECC15E4DC37}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HolyHand.Core", "src\HolyHand.Core\HolyHand.Core.csproj", "{37D0B9FC-4A66-48D4-AFD7-D7930D837F85}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HolyHand.Platform", "src\HolyHand.Platform\HolyHand.Platform.csproj", "{96E64B0A-21FA-413C-8798-DB84555612B3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HolyHand.App", "src\HolyHand.App\HolyHand.App.csproj", "{C2ABA6E5-FC94-42D6-AC17-F4CF5A06F563}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HolyHand.Cli", "src\HolyHand.Cli\HolyHand.Cli.csproj", "{B75AE54D-C1C4-4F5A-9142-D17F9FE96429}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{7DDCB51E-D9A1-412B-88D0-13C590BC6F84}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HolyHand.Tests", "tests\HolyHand.Tests\HolyHand.Tests.csproj", "{902DAC45-E3E3-409C-9ADC-069EB65A7997}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{37D0B9FC-4A66-48D4-AFD7-D7930D837F85}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{37D0B9FC-4A66-48D4-AFD7-D7930D837F85}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{37D0B9FC-4A66-48D4-AFD7-D7930D837F85}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{37D0B9FC-4A66-48D4-AFD7-D7930D837F85}.Release|Any CPU.Build.0 = Release|Any CPU
+		{96E64B0A-21FA-413C-8798-DB84555612B3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{96E64B0A-21FA-413C-8798-DB84555612B3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{96E64B0A-21FA-413C-8798-DB84555612B3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{96E64B0A-21FA-413C-8798-DB84555612B3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C2ABA6E5-FC94-42D6-AC17-F4CF5A06F563}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C2ABA6E5-FC94-42D6-AC17-F4CF5A06F563}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C2ABA6E5-FC94-42D6-AC17-F4CF5A06F563}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C2ABA6E5-FC94-42D6-AC17-F4CF5A06F563}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B75AE54D-C1C4-4F5A-9142-D17F9FE96429}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B75AE54D-C1C4-4F5A-9142-D17F9FE96429}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B75AE54D-C1C4-4F5A-9142-D17F9FE96429}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B75AE54D-C1C4-4F5A-9142-D17F9FE96429}.Release|Any CPU.Build.0 = Release|Any CPU
+		{902DAC45-E3E3-409C-9ADC-069EB65A7997}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{902DAC45-E3E3-409C-9ADC-069EB65A7997}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{902DAC45-E3E3-409C-9ADC-069EB65A7997}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{902DAC45-E3E3-409C-9ADC-069EB65A7997}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{37D0B9FC-4A66-48D4-AFD7-D7930D837F85} = {C8BDDB9E-D030-4772-A60A-9ECC15E4DC37}
+		{96E64B0A-21FA-413C-8798-DB84555612B3} = {C8BDDB9E-D030-4772-A60A-9ECC15E4DC37}
+		{C2ABA6E5-FC94-42D6-AC17-F4CF5A06F563} = {C8BDDB9E-D030-4772-A60A-9ECC15E4DC37}
+		{B75AE54D-C1C4-4F5A-9142-D17F9FE96429} = {C8BDDB9E-D030-4772-A60A-9ECC15E4DC37}
+		{902DAC45-E3E3-409C-9ADC-069EB65A7997} = {7DDCB51E-D9A1-412B-88D0-13C590BC6F84}
+	EndGlobalSection
+EndGlobal

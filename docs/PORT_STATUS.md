@@ -13,7 +13,7 @@
 | 4 | Status indicator (floating) | not started | — | WPF floating panel |
 | 5 | Target app capture | not started | — | GetForegroundWindow + process info |
 | 6 | Accessibility tree walking | not started | — | FlaUI.UIA3 with CacheRequest |
-| 7 | Element model (id, role, label, value) | not started | — | C# record/class |
+| 7 | Element model (id, role, label, value) | done (tested) | AccessibilityElement.cs | C# record with UIA mappings and outcome evidence logic |
 | 8 | Jev API client (action selection) | not started | — | HttpClient + Vercel AI Gateway |
 | 9 | Jev text selection (2-phase) | not started | — | Same pattern, different endpoint |
 | 10 | Jev completion verification | not started | — | Boolean check via /v1/evaluate |
@@ -50,11 +50,11 @@
 | W10 | Elevated target (UIPI) detection | not started | — | Process integrity level check |
 | W11 | Voice input (Whisper.net) | not started | — | NAudio + whisper.cpp |
 | W12 | Dry-run mode (default) | not started | — | Print actions, execute nothing |
-| W13 | Single-instance guard | not started | — | Named Mutex |
-| W14 | Per-monitor DPI v2 | not started | — | App manifest |
+| W13 | Single-instance guard | done (tested) | App.xaml.cs | Global Named Mutex |
+| W14 | Per-monitor DPI v2 | done (tested) | app.manifest | PerMonitorV2 enabled |
 | W15 | System theme following (light/dark) | not started | — | Registry watch or WinRT |
 | W16 | First-run API key setup dialog | not started | — | WPF dialog → Credential Manager |
-| W17 | CLI diagnostics (check, snapshot, dry-run) | not started | — | HolyHand.Cli project |
+| W17 | CLI diagnostics (check, snapshot, dry-run) | partial | HolyHand.Cli | `check` subcommand functional |
 | W18 | Self-contained publish (x64 + arm64) | not started | — | ReadyToRun, Inno Setup |
 | W19 | GitHub Actions CI | not started | — | windows-latest |
 | W20 | Start-at-login toggle | not started | — | Registry or Task Scheduler |

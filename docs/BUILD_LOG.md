@@ -96,6 +96,66 @@ Supporting files: `README.md`, `Package.swift`, `LICENSE`, `rebuild.sh`
   - Installed `graphify claude install` hook and appended graphify section to `CLAUDE.md`.
 
 ### Known Issues & Next Steps
-- User needs to run `npx vercel ai-gateway setup` (see §5.3).
-- Review `docs/PORT_SPEC.md` with user before proceeding to M1 (Scaffold).
+- Completed M0 recon and user review.
+- User noted preference to remove upstream Swift files after full verification at project completion.
+
+---
+
+## 2026-09-21 — M1: Scaffold
+
+### Session Details
+- **Date**: 2026-09-21
+- **Milestone**: M1 — Solution Scaffold & Architecture Foundation
+
+### Structure Built under `windows/`
+- `windows/Directory.Build.props`:
+  - `TargetFramework`: `net8.0-windows10.0.19041.0`
+  - `Nullable`: `enable`
+  - `TreatWarningsAsErrors`: `true`
+  - `Deterministic`: `true`
+  - `ImplicitUsings`: `enable`
+- `windows/Directory.Packages.props`: Central Package Management (CPM) pinning:
+  - `Microsoft.Extensions.DependencyInjection` (8.0.1)
+  - `Microsoft.Extensions.Logging` (8.0.1)
+  - `Microsoft.Windows.CsWin32` (0.3.162)
+  - `FlaUI.UIA3` (4.0.0)
+  - `H.NotifyIcon.Wpf` (2.1.4)
+  - `Serilog` (4.0.2)
+  - `xunit` (2.9.2), `FluentAssertions` (6.12.1), `Moq` (4.20.72)
+- `windows/NativeMethods.txt`: CsWin32 P/Invoke generation list.
+- `windows/HolyHand.sln`: Solution linking all 5 projects.
+
+### Projects Created
+1. **`HolyHand.Core`** (Class Library):
+   - Zero UI / platform dependencies, pure testable logic.
+   - Domain models: `AccessibilityElement`, `AppTarget`, `AgentDecision`, `AgentOperation`, `ActionResult`.
+   - Interfaces: `IScreenReader`, `IDecisionModel`, `IActionExecutor`, `IHotkeyService`, `IRiskPolicy`, `IAuditLog`, `ICredentialStore`, `ISpeechInput`, `IClock`.
+   - Common utilities: `SystemClock`.
+2. **`HolyHand.Platform`** (Class Library):
+   - Bridges `Core` interfaces to Windows APIs.
+   - P/Invoke generator (`CsWin32`), `FlaUI.UIA3` reference, unsafe code enabled.
+3. **`HolyHand.App`** (WPF WinExe):
+   - `<UseWPF>true</UseWPF>`, `app.manifest` (PerMonitorV2 DPI awareness, Windows 10/11 compatibility).
+   - `App.xaml` + `App.xaml.cs` with single-instance mutex guard and DI container setup.
+4. **`HolyHand.Cli`** (Console Exe):
+   - Diagnostic tool supporting `check`, `snapshot`, `dry-run` subcommands.
+5. **`HolyHand.Tests`** (xUnit):
+   - Unit test suite targeting `HolyHand.Core`.
+
+### Verification Results
+- `dotnet restore windows/HolyHand.sln`: ✅ All 5 projects restored.
+- `dotnet build windows/HolyHand.sln -c Release`: ✅ Succeeded with **0 Warning(s), 0 Error(s)** (Warnings As Errors enforced).
+- `dotnet test windows/HolyHand.sln -c Release`: ✅ 1 test passed, 0 failed.
+- `dotnet run --project windows/src/HolyHand.Cli -- check`: ✅ Executed successfully.
+
+### Graphify Update
+- Ran `graphify update .`:
+  - **150 nodes, 171 edges, 34 communities**.
+  - **God nodes**: `App` (12), `AccessibilityElement` (9), `Program` (7), `AppTarget` (7), `AgentDecision` (6).
+  - **Surprising connections**: `App` --inherits--> `Application`, `SystemClock` --implements--> `IClock`.
+  - Updated `graphify-out/GRAPH_REPORT.md`.
+
+### Next Step
+- Milestone M2: Core Logic (pure C# port of RunProgress, TextEntryPlan, TextExtractor, TextFieldFocus, and ChordStateMachine).
+
 
