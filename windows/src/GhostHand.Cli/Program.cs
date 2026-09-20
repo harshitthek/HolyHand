@@ -1,9 +1,14 @@
+using HolyHand.Core.Common;
+
 namespace HolyHand.Cli;
 
 public static class Program
 {
     public static int Main(string[] args)
     {
+        // Load local .env file if available
+        EnvLoader.Load();
+
         Console.WriteLine("HolyHand CLI Diagnostic Tool v0.1.0");
 
         if (args.Length == 0)
@@ -37,6 +42,24 @@ public static class Program
         Console.WriteLine("Running environment checks...");
         Console.WriteLine("  OS: Windows (Build " + Environment.OSVersion.Version.Build + ")");
         Console.WriteLine("  .NET Runtime: " + Environment.Version);
+
+        var key = Environment.GetEnvironmentVariable("AI_GATEWAY_API_KEY");
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine("  AI_GATEWAY_API_KEY: [NOT CONFIGURED] (Set in .env or as environment variable)");
+            Console.ResetColor();
+        }
+        else
+        {
+            var redacted = key.Length > 8 
+                ? $"{key[..4]}...{key[^4..]}" 
+                : "[CONFIGURED]";
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine($"  AI_GATEWAY_API_KEY: {redacted} (Loaded)");
+            Console.ResetColor();
+        }
+
         Console.WriteLine("All scaffold checks passed.");
         return 0;
     }
