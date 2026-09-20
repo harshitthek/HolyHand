@@ -17,16 +17,16 @@
 | 8 | Jev API client (action selection) | done (tested) | JevClientTests.cs, Cli check | HttpClient + Vercel AI Gateway /v1/evaluate (JV-01..09 live verified: 843ms, $0) |
 | 9 | Jev text selection (2-phase) | done (tested) | JevDecisionModel.cs | Regex extraction + Jev choice selection |
 | 10 | Jev completion verification | done (tested) | JevDecisionModel.cs | Boolean verification check via /v1/evaluate |
-| 11 | Agent loop (observe→decide→act→verify) | not started | — | Same structure with DI interfaces |
-| 12 | Click execution (AXPress → UIA Invoke) | not started | — | UIA patterns + SendInput fallback |
-| 13 | Type text execution | not started | — | UIA ValuePattern + SendInput |
-| 14 | Key press execution | not started | — | SendInput with VK codes |
-| 15 | Scroll execution | not started | — | UIA ScrollPattern + SendInput |
-| 16 | Text candidate building | not started | — | Portable from upstream |
-| 17 | Text extraction (regex) | not started | — | Portable from upstream |
-| 18 | Field focus confirmation | not started | — | UIA focus + click fallback |
-| 19 | Loop guard / stall detection | not started | — | Portable from upstream |
-| 20 | Action verification (post-action) | not started | — | Portable from upstream |
+| 11 | Agent loop (observe→decide→act→verify) | done (tested) | AgentLoopTests.cs | Complete loop with state diff and loop guard |
+| 12 | Click execution (AXPress → UIA Invoke) | done (tested) | ActionExecutorTests.cs | UIA Invoke/Toggle/Selection patterns + SendInput fallback (EX-02, EX-03) |
+| 13 | Type text execution | done (tested) | ActionExecutorTests.cs | UIA ValuePattern + SendInput fallback (EX-01) |
+| 14 | Key press execution | done (tested) | ActionExecutor.cs, InputSimulator.cs | SendInput with VK codes (Enter, Tab, Esc) |
+| 15 | Scroll execution | done (tested) | ActionExecutor.cs, InputSimulator.cs | SendInput mouse wheel scroll |
+| 16 | Text candidate building | done (tested) | JevDecisionModel.cs | Regex extraction + candidate matching from user goal |
+| 17 | Text extraction (regex) | done (tested) | JevDecisionModel.cs | Quoted strings & search patterns |
+| 18 | Field focus confirmation | done (tested) | ActionExecutor.cs | Click-to-focus before SendInput fallback |
+| 19 | Loop guard / stall detection | done (tested) | LoopGuard.cs, AgentLoopTests.cs | Identical state hash detection with max consecutive stall limit (EX-05) |
+| 20 | Action verification (post-action) | done (tested) | AgentLoop.cs, AgentLoopTests.cs | Re-snapshot comparison and goal verification |
 | 21 | OCR fallback (Apple Vision → Win OCR) | done (tested) | WindowsOcrService.cs, ScreenReaderTests.cs | Windows.Media.Ocr local fallback (RD-06) |
 | 22 | Window snapshot (for OCR) | done (tested) | WindowsOcrService.cs | Graphics.CopyFromScreen / WinRT SoftwareBitmap |
 | 23 | API key storage (Keychain → Cred Mgr) | done (tested) | EnvLoader.cs | Process environment + .env file loading |
@@ -49,7 +49,7 @@
 | W9 | Per-app deny-list | not started | — | Config-driven |
 | W10 | Elevated target (UIPI) detection | done (tested) | WindowCaptureService.cs | Process integrity level & access check |
 | W11 | Voice input (Whisper.net) | not started | — | NAudio + whisper.cpp |
-| W12 | Dry-run mode (default) | not started | — | Print actions, execute nothing |
+| W12 | Dry-run mode (default) | done (tested) | AgentLoop.cs, HolyHand.Cli | Simulated execution default until M6; CLI dry-run tool |
 | W13 | Single-instance guard | done (tested) | App.xaml.cs | Global Named Mutex |
 | W14 | Per-monitor DPI v2 | done (tested) | app.manifest | PerMonitorV2 enabled |
 | W15 | System theme following (light/dark) | not started | — | Registry watch or WinRT |

@@ -333,6 +333,63 @@ Supporting files: `README.md`, `Package.swift`, `LICENSE`, `rebuild.sh`
 ### Next Step
 - Milestone M5: Agent Loop in Dry-Run (`observe → build candidates → decide (Jev) → risk check → verify → repeat`, loop guard, max steps, action executor with UIA patterns and SendInput fallback, dry-run by default).
 
+---
+
+## 2026-09-21 — M5: Agent Loop in Dry-Run
+
+### Session Details
+- **Date**: 2026-09-21
+- **Milestone**: M5 — Agent Loop in Dry-Run
+
+### Components Built
+1. **Agent Loop Configuration & Guards** (`HolyHand.Core/Agent/`):
+   - `AgentLoopOptions.cs`: Options model supporting `DryRun` (default: true), `MaxSteps` (default: 15), `MaxConsecutiveStalls` (default: 3), and `ActionTimeoutSeconds` (default: 10).
+   - `LoopGuard.cs`: Pure stall detector computing stable SHA-256 state signatures across element lists and detecting repetitive unchanged states to prevent infinite loops.
+   - `UrlLauncherValidator.cs`: Strict URL security filter allowing only `http` and `https` schemes derived from the user goal, rejecting dangerous URI schemes (`file:`, `javascript:`, `cmd:`).
+2. **Agent Loop Orchestrator** (`HolyHand.Core/Agent/`):
+   - `AgentLoop.cs`: Pure orchestrator executing the full feedback cycle:
+     - `observe`: reads element snapshot via `IScreenReader`.
+     - `decide`: calls `IDecisionModel.DecideNextActionAsync` with ranked candidates and user goal.
+     - `act`: delegates to `IActionExecutor` (respecting `DryRun` flag).
+     - `verify`: re-reads screen state to compute state diff and calls `IDecisionModel.VerifyCompletionAsync`.
+     - `loop guard & limits`: stops on max steps exceeded, consecutive stalls, goal achieved, human consultation requested, or kill switch cancellation.
+     - Emits `StatusChanged` and `StepCompleted` events for UI status and live diagnostics.
+3. **Win32 Input Simulator** (`HolyHand.Platform/Execution/`):
+   - `InputSimulator.cs`: Low-level wrapper around CsWin32 `SendInput`:
+     - Mouse clicking via `MOUSEEVENTF_LEFTDOWN` / `MOUSEEVENTF_LEFTUP`.
+     - Mouse wheel scrolling via `MOUSEEVENTF_WHEEL`.
+     - Keyboard key down/up with `VIRTUAL_KEY` (Return, Tab, Escape).
+     - Unicode text typing via `KEYEVENTF_UNICODE`.
+4. **Action Executor with Pattern Priority & Process Guard** (`HolyHand.Platform/Execution/`):
+   - `ActionExecutor.cs`: Implements `IActionExecutor`.
+     - Respects `DryRun` mode (simulates actions with logging and 150ms pacing).
+     - Live execution: checks foreground window process ID before every action (`GetForegroundProcessId()`) to immediately abort if the user changed apps mid-run (ProcessGuard).
+     - Pattern traversal: searches deepest element from point and walks up ancestor chain for `InvokePattern`, `TogglePattern`, `SelectionItemPattern`, and `ValuePattern` before falling back to `SendInput`.
+5. **CLI Dry-Run Subcommand** (`HolyHand.Cli/Program.cs`):
+   - `HolyHand.Cli dry-run <goal>`: captures foreground target window, spins up `UiaScreenReader`, `JevDecisionModel`, `ActionExecutor`, and `AgentLoop` in dry-run mode, logs step-by-step decisions with confidence, and handles Ctrl+C kill switch cleanly.
+
+### Test Results
+- Unit and UI test suite (`AgentLoopTests.cs` and `ActionExecutorTests.cs`):
+  - **EX-01**: ValuePattern text entry into WPF window verified with live read-back (Passed).
+  - **EX-02**: InvokePattern button click verified on live WPF window (Passed).
+  - **EX-03**: SendInput fallback used when control lacks pattern support (Passed).
+  - **EX-04**: ProcessGuard aborts execution if foreground process changes mid-action (Passed).
+  - **EX-05**: LoopGuard halts execution upon reaching consecutive unchanged state limit (Passed).
+  - **EX-06**: Max steps cap stops execution with `MaxStepsReached` status (Passed).
+  - **EX-07**: URL validator accepts valid http/https URLs and rejects unsafe schemes (Passed).
+- Sequential UI test isolation: Added `[assembly: CollectionBehavior(DisableTestParallelization = true)]` to prevent multi-threaded WPF desktop focus collisions in xUnit.
+- Total solution tests: **31 passed, 0 failed, 0 skipped** across all test suites.
+- Build status: **0 Warning(s), 0 Error(s)** under `<TreatWarningsAsErrors>true</TreatWarningsAsErrors>`.
+
+### Graphify Update
+- Ran `graphify update .`:
+  - Updated graph with `AgentLoop`, `AgentLoopOptions`, `LoopGuard`, `UrlLauncherValidator`, `InputSimulator`, and `ActionExecutor`.
+  - Updated `graphify-out/GRAPH_REPORT.md`.
+
+### Next Step
+- Milestone M6: Safety and Real Execution (`IRiskPolicy`, confirmation dialog, kill switch, deny-list, audit log in `%LOCALAPPDATA%\HolyHand\audit`, Jev risk-escalation call, enable real execution toggle).
+
+
 
 
 

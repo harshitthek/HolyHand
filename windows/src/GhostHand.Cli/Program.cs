@@ -1,8 +1,10 @@
 using System.Diagnostics;
+using HolyHand.Core.Agent;
 using HolyHand.Core.Common;
 using HolyHand.Core.Jev;
 using HolyHand.Core.Models;
 using HolyHand.Core.ScreenReading;
+using HolyHand.Platform.Execution;
 using HolyHand.Platform.ScreenReading;
 using HolyHand.Platform.Windowing;
 using Microsoft.Extensions.Logging;
@@ -30,7 +32,7 @@ public static class Program
         {
             "check" => await RunCheckAsync(),
             "snapshot" => await RunSnapshotAsync(args),
-            "dry-run" => RunDryRun(args),
+            "dry-run" => await RunDryRunAsync(args),
             _ => PrintUnknownCommand(command)
         };
     }
@@ -263,11 +265,96 @@ public static class Program
         return 0;
     }
 
-    private static int RunDryRun(string[] args)
+    private static async Task<int> RunDryRunAsync(string[] args)
     {
-        var goal = args.Length > 1 ? args[1] : "sample goal";
-        Console.WriteLine($"Dry-run mode: plan actions for goal '{goal}' (simulated)");
-        return 0;
+        var goal = args.Length > 1 ? args[1] : "search for Adele";
+        Console.WriteLine("HolyHand Agent Loop — DRY-RUN MODE");
+        Console.WriteLine("--------------------------------------------------------------------------------");
+        Console.WriteLine($"Goal: \"{goal}\"");
+        Console.WriteLine("Executing in simulated mode (no physical mouse/keyboard input will be sent).\n");
+
+        Console.WriteLine("Focus the target window (waiting 2 seconds)...");
+        await Task.Delay(2000);
+
+        var target = WindowCaptureService.CaptureCurrentForegroundWindow();
+        if (target == null || target.WindowHandle == IntPtr.Zero)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine("Failed to capture target foreground window.");
+            Console.ResetColor();
+            return 1;
+        }
+
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine($"Target Window: \"{target.WindowTitle}\" ({target.ProcessName}, PID {target.ProcessId})\n");
+        Console.ResetColor();
+
+        using var loggerFactory = LoggerFactory.Create(b => b.AddConsole().SetMinimumLevel(LogLevel.Warning));
+        var ocrLogger = loggerFactory.CreateLogger<WindowsOcrService>();
+        var readerLogger = loggerFactory.CreateLogger<UiaScreenReader>();
+        var jevLogger = loggerFactory.CreateLogger<JevDecisionModel>();
+        var execLogger = loggerFactory.CreateLogger<ActionExecutor>();
+        var loopLogger = loggerFactory.CreateLogger<AgentLoop>();
+
+        var jevOptions = JevOptions.FromEnvironment();
+        using var httpClient = new HttpClient();
+        var jevClient = new JevClient(httpClient, jevOptions, NullLogger<JevClient>.Instance);
+        var decisionModel = new JevDecisionModel(jevClient, jevOptions, jevLogger);
+
+        var ocrService = new WindowsOcrService(ocrLogger);
+        using var screenReader = new UiaScreenReader(ScreenReaderOptions.Default, ocrService, readerLogger);
+        using var actionExecutor = new ActionExecutor(execLogger, dryRun: true);
+
+        var loopOptions = new AgentLoopOptions
+        {
+            DryRun = true,
+            MaxSteps = 10,
+            MaxConsecutiveStalls = 3
+        };
+
+        var loop = new AgentLoop(screenReader, decisionModel, actionExecutor, loopOptions, loopLogger);
+
+        loop.StatusChanged += msg =>
+        {
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine($"[STATUS] {msg}");
+            Console.ResetColor();
+        };
+
+        loop.StepCompleted += (step, decision, result) =>
+        {
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine($"[STEP {step}] Decision: {decision.Operation} on '{decision.TargetLabel ?? decision.TargetId}' (Conf: {decision.Confidence:P0})");
+            Console.ResetColor();
+            Console.WriteLine($"         Action Result: {(result.Success ? "SUCCESS" : "FAIL")} — {result.Message ?? result.Error}\n");
+        };
+
+        using var cts = new CancellationTokenSource();
+        Console.CancelKeyPress += (_, e) =>
+        {
+            e.Cancel = true;
+            Console.WriteLine("\n[KILL SWITCH] Interrupted by user. Cancelling...");
+            cts.Cancel();
+        };
+
+        var runResult = await loop.RunAsync(goal, target, cts.Token);
+
+        Console.WriteLine("--------------------------------------------------------------------------------");
+        Console.ForegroundColor = runResult.Status switch
+        {
+            AgentRunStatus.Completed => ConsoleColor.Green,
+            AgentRunStatus.NeedsHumanInput => ConsoleColor.Yellow,
+            AgentRunStatus.Stalled => ConsoleColor.DarkYellow,
+            AgentRunStatus.Cancelled => ConsoleColor.Red,
+            _ => ConsoleColor.Red
+        };
+
+        Console.WriteLine($"Result: {runResult.Status.ToString().ToUpperInvariant()} ({runResult.StepsCompleted} steps)");
+        Console.WriteLine($"Message: {runResult.Message}");
+        Console.ResetColor();
+        Console.WriteLine("--------------------------------------------------------------------------------");
+
+        return runResult.Status == AgentRunStatus.Completed ? 0 : 1;
     }
 
     private static int PrintUnknownCommand(string command)

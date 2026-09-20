@@ -20,3 +20,5 @@ OpenProcess
 OpenProcessToken
 GetTokenInformation
 CloseHandle
+SetCursorPos
+SetForegroundWindow
