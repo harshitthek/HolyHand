@@ -7,8 +7,8 @@ public class JevOptions
     public string? ApiKey { get; set; }
     public bool ZeroDataRetention { get; set; } = false;
     public int TimeoutSeconds { get; set; } = 30;
-    public int MaxRetries { get; set; } = 3;
-    public double DecisionConfidenceThreshold { get; set; } = 0.70;
+    public int MaxRetries { get; set; } = 4;
+    public double DecisionConfidenceThreshold { get; set; } = 0.55;
     public double RiskConfidenceThreshold { get; set; } = 0.70;
 
     public static JevOptions FromEnvironment()

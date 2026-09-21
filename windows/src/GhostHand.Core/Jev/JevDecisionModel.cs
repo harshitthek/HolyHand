@@ -226,8 +226,8 @@ public class JevDecisionModel : IDecisionModel
     {
         var choices = new Dictionary<string, string>();
 
-        // Extract search/literal phrase from user goal
-        var textCandidate = ExtractSearchPhrase(goal);
+        // Extract search/literal candidate phrases from user goal
+        var textCandidates = ExtractCandidatePhrases(goal);
 
         int clickCount = 0;
         foreach (var el in elements)
@@ -242,11 +242,14 @@ public class JevDecisionModel : IDecisionModel
                 choices[key] = desc;
             }
 
-            if (IsTypeable(el.Role) && !string.IsNullOrEmpty(textCandidate))
+            if (IsTypeable(el.Role) && textCandidates.Count > 0)
             {
-                var key = $"type:{el.Id}:{textCandidate}";
-                var desc = $"Type \"{textCandidate}\" into {el.DisplayRole} \"{el.DisplayLabel}\"";
-                choices[key] = desc;
+                foreach (var textCandidate in textCandidates.Take(3))
+                {
+                    var key = $"type:{el.Id}:{textCandidate}";
+                    var desc = $"Type \"{textCandidate}\" into {el.DisplayRole} \"{el.DisplayLabel}\"";
+                    choices[key] = desc;
+                }
             }
         }
 
@@ -325,19 +328,54 @@ public class JevDecisionModel : IDecisionModel
         role.Equals("Document", StringComparison.OrdinalIgnoreCase) ||
         role.Equals("ComboBox", StringComparison.OrdinalIgnoreCase);
 
-    private static string ExtractSearchPhrase(string goal)
+    public static List<string> ExtractCandidatePhrases(string goal)
     {
-        // 1. Check for quoted text: search for "Adele" or type "Hello"
-        var quoteMatch = Regex.Match(goal, "\"([^\"]+)\"");
-        if (quoteMatch.Success)
-            return quoteMatch.Groups[1].Value;
+        var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        // 2. Check for search for ... pattern
-        var searchMatch = Regex.Match(goal, @"(?:search|look)\s+for\s+(.+)$", RegexOptions.IgnoreCase);
+        // 1. Quoted text: "Adele", 'Hello World'
+        foreach (Match m in Regex.Matches(goal, @"[""']([^""']+)[""']"))
+        {
+            var val = m.Groups[1].Value.Trim();
+            if (!string.IsNullOrEmpty(val)) candidates.Add(val);
+        }
+
+        // 2. Action verbs with target hints: "write/type/enter/insert/put <text> in/into/there/..."
+        var writeMatch = Regex.Match(goal, @"(?:write|type|enter|insert|put)\s+(?:the\s+text\s+)?(?:[""']?)(.+?)(?:[""']?)(?:\s+(?:in|into|there|here|on|to)\b|$|\.)", RegexOptions.IgnoreCase);
+        if (writeMatch.Success)
+        {
+            var val = writeMatch.Groups[1].Value.Trim();
+            val = Regex.Replace(val, @"\s+(?:in|into|to)\s+(?:notepad|document|file|editor|app).*$", "", RegexOptions.IgnoreCase).Trim();
+            if (!string.IsNullOrEmpty(val) && !val.Equals("there", StringComparison.OrdinalIgnoreCase))
+                candidates.Add(val);
+        }
+
+        // 3. Search queries: "search/look for <text>"
+        var searchMatch = Regex.Match(goal, @"(?:search|look)\s+for\s+(?:[""']?)(.+?)(?:[""']?)($|\.)", RegexOptions.IgnoreCase);
         if (searchMatch.Success)
-            return searchMatch.Groups[1].Value.Trim();
+        {
+            var val = searchMatch.Groups[1].Value.Trim();
+            if (!string.IsNullOrEmpty(val)) candidates.Add(val);
+        }
 
-        return string.Empty;
+        // 4. Calculations: "calculate/compute <expression>"
+        var calcMatch = Regex.Match(goal, @"(?:calculate|calc|compute)\s+(.+)$", RegexOptions.IgnoreCase);
+        if (calcMatch.Success)
+        {
+            var val = calcMatch.Groups[1].Value.Trim();
+            if (!string.IsNullOrEmpty(val)) candidates.Add(val);
+        }
+
+        // 5. Fallback: If no candidate extracted yet, see if goal is a direct short phrase
+        if (candidates.Count == 0 && !goal.StartsWith("click", StringComparison.OrdinalIgnoreCase) && !goal.StartsWith("scroll", StringComparison.OrdinalIgnoreCase))
+        {
+            var cleaned = Regex.Replace(goal, @"^(?:please\s+|can\s+you\s+|i\s+want\s+to\s+)", "", RegexOptions.IgnoreCase).Trim();
+            if (cleaned.Length > 0 && cleaned.Length <= 40)
+            {
+                candidates.Add(cleaned);
+            }
+        }
+
+        return candidates.ToList();
     }
 
     private static string Truncate(string text, int maxChars)

@@ -57,6 +57,11 @@ public class WindowsOcrService
 
             return await RecognizeBitmapAsync(bitmap, bounds.Location, cancellationToken);
         }
+        catch (System.ComponentModel.Win32Exception ex)
+        {
+            _logger.LogDebug(ex, "Could not capture off-screen area {Bounds} for OCR.", bounds);
+            return Array.Empty<AccessibilityElement>();
+        }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Error executing Windows OCR on screen area {Bounds}", bounds);

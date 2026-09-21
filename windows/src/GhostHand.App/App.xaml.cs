@@ -155,16 +155,26 @@ public partial class App : Application
                     _confirmationDialog,
                     auditLog);
 
+                loop.StatusChanged += status =>
+                {
+                    _popup?.UpdateStatus(status);
+                };
+
                 var runResult = await loop.RunAsync(goal, target, token);
                 _logger?.LogInformation("Agent loop finished with status {Status}: {Message}", runResult.Status, runResult.Message);
+
+                bool isSuccess = runResult.Status == AgentRunStatus.Completed;
+                _popup?.OnRunCompleted(runResult.Message ?? runResult.Status.ToString(), isSuccess);
             }
             catch (OperationCanceledException)
             {
                 _logger?.LogInformation("Agent loop cancelled by user.");
+                _popup?.OnRunCompleted("Cancelled by user", false);
             }
             catch (Exception ex)
             {
                 _logger?.LogError(ex, "Agent loop encountered an unexpected error.");
+                _popup?.OnRunCompleted(ex.Message, false);
             }
         }, token);
     }

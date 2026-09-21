@@ -50,8 +50,53 @@ public partial class PromptPopupWindow : Window
         PromptInput.Focus();
     }
 
+    public void SetExecuting(bool isExecuting, string? status = null)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            PromptInput.IsEnabled = !isExecuting;
+            SendButton.IsEnabled = !isExecuting;
+            SendButton.Content = isExecuting ? "Running…" : "Send ↵";
+            if (!string.IsNullOrEmpty(status))
+            {
+                StatusText.Text = status;
+                StatusText.Foreground = System.Windows.Media.Brushes.LightSkyBlue;
+            }
+        });
+    }
+
+    public void UpdateStatus(string status, bool isError = false)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            StatusText.Text = status;
+            StatusText.Foreground = isError 
+                ? System.Windows.Media.Brushes.OrangeRed 
+                : System.Windows.Media.Brushes.LightSkyBlue;
+        });
+    }
+
+    public void OnRunCompleted(string message, bool success)
+    {
+        Dispatcher.Invoke(async () =>
+        {
+            SetExecuting(false);
+            StatusText.Text = (success ? "✅ " : "⚠️ ") + message;
+            StatusText.Foreground = success 
+                ? System.Windows.Media.Brushes.LightGreen 
+                : System.Windows.Media.Brushes.OrangeRed;
+
+            if (success)
+            {
+                await Task.Delay(1800);
+                HidePopup();
+            }
+        });
+    }
+
     public void HidePopup()
     {
+        SetExecuting(false);
         Hide();
         Cancelled?.Invoke();
     }
@@ -74,7 +119,7 @@ public partial class PromptPopupWindow : Window
             return;
         }
 
-        Hide();
+        SetExecuting(true, "Starting automation...");
         TaskSubmitted?.Invoke(goal, _currentTarget);
     }
 
