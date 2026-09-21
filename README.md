@@ -1,64 +1,97 @@
-# Third Hand
+# HolyHand (Windows)
 
-A small macOS menu bar assistant. Focus an app, press **Control–Space**, and tell it what to do.
+> A Windows-native AI desktop assistant. Focus an app, press **Ctrl + Win**, and tell it what to do.
 
-Third Hand reads accessible controls, types, clicks, and checks the result. Press **Control–Space** again or click **×** to stop.
+HolyHand reads accessible UI controls via Windows UI Automation, selects the optimal actions using the **Jev** decision model (`typesafe-ai/jev`) via **Vercel AI Gateway**, types, clicks, and verifies the outcome in real time.
 
-## Download
+Before any critical or irreversible step (*Submit, Apply, Send, Pay, Delete, Post, Install, Confirm*), HolyHand pauses and asks you to approve. Routine steps execute automatically.
 
-[Download the latest release](https://github.com/shhivv/third-hand/releases/latest) for Apple Silicon Macs running macOS 14 or newer. Unzip the archive, move **Third Hand.app** to Applications, and open it. Release builds are Developer ID-signed and notarized by Apple. A TypeSafe API key is required.
+---
 
-## Build from source
+## Download & Installation
 
-You’ll need **Xcode 15 or newer**, an Apple Development or Developer ID signing certificate, and a [TypeSafe API key](https://typesafe.ai).
+1. **Download the latest release:**
+   Download `HolyHand-v0.1.0-win-x64.zip` from the [Releases](HolyHand/releases/latest) page.
+2. **Extract the archive:**
+   Extract the zip file to any folder on your PC (e.g. `C:\HolyHand`).
+   *(No .NET runtime installation required — everything is self-contained and compiled with ReadyToRun).*
+3. **Configure your API Key:**
+   Copy `.env.example` to `.env` in the extracted folder and add your Vercel AI Gateway API key:
+   ```ini
+   AI_GATEWAY_API_KEY=vck_your_api_key_here
+   AI_GATEWAY_ZERO_DATA_RETENTION=false
+   ```
+4. **Test your setup:**
+   Double-click `CHECK_CONNECTION.bat` (or run `HolyHand.Cli.exe check`). It will test the connection to Jev via Vercel AI Gateway.
+5. **Start HolyHand:**
+   Double-click `START_HOLYHAND.bat` (or run `HolyHand.App.exe`). HolyHand runs silently in your Windows System Tray.
 
-```sh
-git clone git@github.com:shhivv/third-hand.git
-cd third-hand
-./rebuild.sh
-open "Third Hand.app"
+---
+
+## How to Use
+
+1. **Focus any application** on your PC (Notepad, Calculator, Google Chrome, Microsoft Edge, Spotify, etc.).
+2. Press the global chord:
+   $$\mathbf{Ctrl} + \mathbf{Win}$$
+3. The dark acrylic HolyHand popup will appear immediately above your target app.
+4. Type your instruction, for example:
+   - *"Write a meeting agenda for tomorrow's sprint review"*
+   - *"Calculate 450 * 12 + 85"*
+   - *"Search for Adele on Spotify"*
+5. Press **Enter** to submit.
+6. **Kill Switch:** Press **Ctrl + Win** again, press **Esc**, or click **Stop** at any moment to cancel automation immediately.
+
+---
+
+## Safety & Invariants
+
+HolyHand is built with strict safety gates:
+- **Plain-Code Risk Policy:** Actions involving sensitive verbs (*Submit, Apply, Send, Pay, Buy, Delete, Remove, Post, Install, Run, Confirm*) unconditionally require human confirmation.
+- **Confirmation Modal:** Displays the exact action, target control, and window title before execution. Press **Enter** to approve or **Esc** to reject.
+- **Privacy & Redaction:** Password fields (`IsPassword=true`) and credit cards / tokens are never captured or sent to the model.
+- **App Deny-List:** Password managers (1Password, Bitwarden, KeePass, etc.) are strictly blocked from automation.
+- **Local Audit Log:** Every action, decision, and risk score is logged locally to `%LOCALAPPDATA%\HolyHand\audit`.
+
+---
+
+## Architecture & Windows Stack
+
+| Concern | Windows Implementation |
+|---|---|
+| **Language & Runtime** | C# on .NET 8 LTS (`net8.0-windows10.0.19041.0`) |
+| **UI** | WPF acrylic popup + system tray integration |
+| **Screen Reading** | Windows UI Automation (`FlaUI.UIA3`) with `CacheRequest` batching |
+| **OCR Fallback** | `Windows.Media.Ocr` (built-in, private, local on-device) |
+| **Input & Execution** | UIA Control Patterns (Invoke, Value, Toggle, Scroll) with `SendInput` fallback |
+| **Global Hotkey** | Low-level keyboard hook (`WH_KEYBOARD_LL`) with pure chord state machine & Start-menu suppression |
+| **AI Decision Model** | `typesafe-ai/jev` via Vercel AI Gateway (`/v1/evaluate`) |
+
+---
+
+## Building from Source
+
+### Prerequisites
+- Windows 10 (build 19041+) or Windows 11 (x64 or ARM64)
+- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
+
+### Build & Test
+```powershell
+git clone HolyHand.git
+cd HolyHand
+
+# Run all 71 unit and integration tests
+dotnet test windows/HolyHand.sln
+
+# Publish self-contained ReadyToRun release
+dotnet publish windows/src/HolyHand.App/HolyHand.App.csproj -c Release -r win-x64 --self-contained true -p:PublishReadyToRun=true -o dist/HolyHand-win-x64
 ```
 
-In the setup window:
+---
 
-1. Enable **Accessibility** so Third Hand can read and control apps.
-2. Enable **Screen Recording** for local text recognition when an app’s controls aren’t accessible.
-3. Add your **TypeSafe API key**. It’s saved in macOS Keychain.
+## Upstream & Credits
 
-Switch to an app, press **Control–Space**, and try a specific task, such as “Search for Adele.”
-
-The app runs on macOS 14+. Jev is the only model; Apple Intelligence is not required.
-
-## How it works
-
-- **Accessibility** reads controls and their current values.
-- **Apple Vision** reads screen text locally when needed. Screenshots aren’t uploaded.
-- **Jev** chooses actions from text descriptions. Your request, app name, screen labels and values, and recent action history are sent to TypeSafe. Third Hand is **not fully offline**.
-- **Structured text entry** lets Jev select search phrases or literal text from your current request. Free-form writing and arbitrary command generation are not supported.
-
-No bundled model weights or extra runtime dependencies. Third Hand never restarts the apps it controls.
-
-## Development
-
-```sh
-./rebuild.sh       # Build, sign, and update Third Hand.app
-swift test         # Run tests without calling the live API
-```
-
-Always run the repository-root `Third Hand.app`. The build script keeps the same signing identity to preserve macOS permissions and retains the previous app in `.build/install.*`. Keep `.holyhand-signing-identity` on your machine; it is excluded from Git. If no certificate is available, create an Apple Development certificate in Xcode before building.
-
-Setup shows current permission status. If macOS asks you to quit and reopen after granting access, reopen this same copy.
-
-Diagnostic logs are written to `~/Desktop/holyhand.log`. They include action status, timing, and bounded API rejection messages. Review logs before sharing: service error messages can contain request details. API keys are redacted from those messages.
-
-For terminal entry, focus a shell prompt and provide the exact command, such as `type "ls -la"`. Third Hand preserves the supplied command and submits only when Jev selects Return. It does not construct commands from navigation requests or append verification commands. It will not retype a terminal command automatically. Interactive editors and non-shell terminal programs are not supported by this entry mode.
-
-## Status
-
-An early, experimental project. Some apps expose incomplete controls; icon-only interfaces, custom editors, and complex gestures may not work. A task can stop without completing, and reported completion still needs your judgment. Stay nearby while it works.
-
-Issues and pull requests are welcome. Please include your macOS version, the app involved, and the steps to reproduce. Don’t include API keys or private screen content.
+HolyHand is based on [Third Hand](https://github.com/shhivv/third-hand) by Shiv Shanmugam (`shiv@tryisle.com`), licensed under the MIT License. See [NOTICE](NOTICE) for full attribution.
 
 ## License
 
-[MIT](LICENSE) — Shiv Shanmugam · [shiv@tryisle.com](mailto:shiv@tryisle.com)
+Licensed under the [MIT License](LICENSE).
