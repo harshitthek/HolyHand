@@ -78,18 +78,15 @@ public partial class PromptPopupWindow : Window
 
     public void OnRunCompleted(string message, bool success)
     {
-        Dispatcher.Invoke(async () =>
+        Dispatcher.Invoke(() =>
         {
             SetExecuting(false);
-            StatusText.Text = (success ? "✅ " : "⚠️ ") + message;
-            StatusText.Foreground = success 
-                ? System.Windows.Media.Brushes.LightGreen 
-                : System.Windows.Media.Brushes.OrangeRed;
-
-            if (success)
+            if (!success)
             {
-                await Task.Delay(1800);
-                HidePopup();
+                StatusText.Text = "⚠️ " + message;
+                StatusText.Foreground = System.Windows.Media.Brushes.OrangeRed;
+                Show();
+                Activate();
             }
         });
     }
@@ -119,7 +116,7 @@ public partial class PromptPopupWindow : Window
             return;
         }
 
-        SetExecuting(true, "Starting automation...");
+        Hide();
         TaskSubmitted?.Invoke(goal, _currentTarget);
     }
 

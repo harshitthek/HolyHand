@@ -134,7 +134,17 @@ public partial class App : Application
 
                 var ocrService = new WindowsOcrService(NullLogger<WindowsOcrService>.Instance);
                 using var screenReader = new UiaScreenReader(ScreenReaderOptions.Default, ocrService, NullLogger<UiaScreenReader>.Instance);
-                using var actionExecutor = new ActionExecutor(NullLogger<ActionExecutor>.Instance, dryRun: false);
+                using var actionExecutor = new ActionExecutor(NullLogger<ActionExecutor>.Instance, dryRun: false)
+                {
+                    TargetWindowHandle = target.WindowHandle,
+                    ExpectedProcessId = target.ProcessId
+                };
+
+                if (target.WindowHandle != IntPtr.Zero)
+                {
+                    global::Windows.Win32.PInvoke.SetForegroundWindow((global::Windows.Win32.Foundation.HWND)target.WindowHandle);
+                }
+
                 using var auditLog = new JsonlAuditLog();
                 var riskPolicy = new RiskPolicy();
 

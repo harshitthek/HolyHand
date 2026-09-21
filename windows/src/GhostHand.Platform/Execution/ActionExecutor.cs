@@ -18,6 +18,7 @@ public class ActionExecutor : IActionExecutor, IDisposable
 
     public bool DryRun { get; set; } = true;
     public int? ExpectedProcessId { get; set; }
+    public IntPtr? TargetWindowHandle { get; set; }
 
     public ActionExecutor(ILogger<ActionExecutor> logger, bool dryRun = true)
     {
@@ -58,6 +59,13 @@ public class ActionExecutor : IActionExecutor, IDisposable
             // Simulate tiny execution delay
             await Task.Delay(150, cancellationToken);
             return ActionResult.SuccessResult($"[DRY RUN] Simulated {decision.Operation} on '{decision.TargetLabel ?? decision.TargetId}'");
+        }
+
+        // Re-focus target window before physical execution
+        if (TargetWindowHandle.HasValue && TargetWindowHandle.Value != IntPtr.Zero)
+        {
+            PInvoke.SetForegroundWindow((HWND)TargetWindowHandle.Value);
+            await Task.Delay(60, cancellationToken);
         }
 
         // Live execution mode: verify foreground process matches expected target (UIPI / safety check)

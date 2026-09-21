@@ -101,19 +101,36 @@ public class WindowCaptureService : IWindowCaptureService
     public static unsafe AppTarget? CaptureWindowByProcessId(int processId)
     {
         HWND foundHwnd = HWND.Null;
+        HWND fallbackHwnd = HWND.Null;
+
         PInvoke.EnumWindows((hwnd, _) =>
         {
             uint pid = 0;
             PInvoke.GetWindowThreadProcessId(hwnd, &pid);
             if (pid == (uint)processId && PInvoke.IsWindowVisible(hwnd))
             {
-                foundHwnd = hwnd;
-                return false;
+                RECT rect;
+                if (PInvoke.GetWindowRect(hwnd, out rect))
+                {
+                    int w = rect.right - rect.left;
+                    int h = rect.bottom - rect.top;
+                    if (w > 150 && h > 150)
+                    {
+                        foundHwnd = hwnd;
+                        return false;
+                    }
+                }
+
+                if (fallbackHwnd == HWND.Null)
+                {
+                    fallbackHwnd = hwnd;
+                }
             }
             return true;
         }, 0);
 
-        return foundHwnd != HWND.Null ? CaptureWindowByHwnd(foundHwnd) : null;
+        var finalHwnd = foundHwnd != HWND.Null ? foundHwnd : fallbackHwnd;
+        return finalHwnd != HWND.Null ? CaptureWindowByHwnd(finalHwnd) : null;
     }
 
     public static AppTarget? CaptureWindowByProcessName(string processName)
@@ -123,8 +140,15 @@ public class WindowCaptureService : IWindowCaptureService
         {
             using (proc)
             {
-                var target = CaptureWindowByProcessId(proc.Id);
-                if (target != null) return target;
+                try
+                {
+                    var target = CaptureWindowByProcessId(proc.Id);
+                    if (target != null) return target;
+                }
+                catch
+                {
+                    // Ignore inaccessible processes
+                }
             }
         }
         return null;
