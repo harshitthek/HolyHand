@@ -1,11 +1,20 @@
+using System.Net.Http;
 using System.Windows;
 using HolyHand.App.Windows;
+using HolyHand.Core.Agent;
 using HolyHand.Core.Common;
 using HolyHand.Core.Interfaces;
+using HolyHand.Core.Jev;
+using HolyHand.Core.Safety;
+using HolyHand.Core.ScreenReading;
+using HolyHand.Platform.Execution;
 using HolyHand.Platform.Hotkey;
+using HolyHand.Platform.Safety;
+using HolyHand.Platform.ScreenReading;
 using HolyHand.Platform.Windowing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace HolyHand.App;
 
@@ -18,6 +27,8 @@ public partial class App : Application
     private IHotkeyService? _hotkeyService;
     private IWindowCaptureService? _windowCapture;
     private PromptPopupWindow? _popup;
+    private ConfirmationDialog? _confirmationDialog;
+    private CancellationTokenSource? _runCts;
     private ILogger<App>? _logger;
 
     protected override void OnStartup(StartupEventArgs e)
@@ -48,10 +59,12 @@ public partial class App : Application
         _windowCapture = _serviceProvider.GetRequiredService<IWindowCaptureService>();
         _hotkeyService = _serviceProvider.GetRequiredService<IHotkeyService>();
 
-        // Pre-create popup window (hidden at startup for instant display)
+        // Pre-create windows (hidden at startup for instant display)
         _popup = new PromptPopupWindow();
         _popup.TaskSubmitted += OnTaskSubmitted;
         _popup.Cancelled += OnTaskCancelled;
+
+        _confirmationDialog = new ConfirmationDialog();
 
         _hotkeyService.HotkeyPressed += OnHotkeyPressed;
         _hotkeyService.KillSwitchTriggered += OnKillSwitchTriggered;
@@ -87,8 +100,10 @@ public partial class App : Application
     {
         Dispatcher.Invoke(() =>
         {
-            _logger?.LogInformation("Kill switch triggered. Hiding popup.");
+            _logger?.LogInformation("Kill switch triggered. Cancelling active tasks.");
+            _runCts?.Cancel();
             _popup?.HidePopup();
+            _confirmationDialog?.Hide();
         });
     }
 
@@ -96,15 +111,74 @@ public partial class App : Application
     {
         _logger?.LogInformation("Goal submitted: '{Goal}' for app '{ProcessName}' (HWND: 0x{Hwnd:X})",
             goal, target?.ProcessName ?? "Unknown", target?.WindowHandle.ToInt64() ?? 0);
+
+        if (target == null || target.WindowHandle == IntPtr.Zero)
+        {
+            _logger?.LogWarning("Cannot start agent run: No valid target window.");
+            return;
+        }
+
+        _runCts?.Cancel();
+        _runCts?.Dispose();
+        _runCts = new CancellationTokenSource();
+        var token = _runCts.Token;
+
+        Task.Run(async () =>
+        {
+            try
+            {
+                var jevOptions = JevOptions.FromEnvironment();
+                using var httpClient = new HttpClient();
+                var jevClient = new JevClient(httpClient, jevOptions, NullLogger<JevClient>.Instance);
+                var decisionModel = new JevDecisionModel(jevClient, jevOptions, NullLogger<JevDecisionModel>.Instance);
+
+                var ocrService = new WindowsOcrService(NullLogger<WindowsOcrService>.Instance);
+                using var screenReader = new UiaScreenReader(ScreenReaderOptions.Default, ocrService, NullLogger<UiaScreenReader>.Instance);
+                using var actionExecutor = new ActionExecutor(NullLogger<ActionExecutor>.Instance, dryRun: false);
+                using var auditLog = new JsonlAuditLog();
+                var riskPolicy = new RiskPolicy();
+
+                var loopOptions = new AgentLoopOptions
+                {
+                    DryRun = false,
+                    MaxSteps = 15,
+                    MaxConsecutiveStalls = 3
+                };
+
+                var loop = new AgentLoop(
+                    screenReader,
+                    decisionModel,
+                    actionExecutor,
+                    loopOptions,
+                    NullLogger<AgentLoop>.Instance,
+                    riskPolicy,
+                    _confirmationDialog,
+                    auditLog);
+
+                var runResult = await loop.RunAsync(goal, target, token);
+                _logger?.LogInformation("Agent loop finished with status {Status}: {Message}", runResult.Status, runResult.Message);
+            }
+            catch (OperationCanceledException)
+            {
+                _logger?.LogInformation("Agent loop cancelled by user.");
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Agent loop encountered an unexpected error.");
+            }
+        }, token);
     }
 
     private void OnTaskCancelled()
     {
         _logger?.LogInformation("Goal input cancelled.");
+        _runCts?.Cancel();
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _runCts?.Cancel();
+        _runCts?.Dispose();
         _hotkeyService?.Stop();
         _hotkeyService?.Dispose();
         _serviceProvider?.Dispose();
