@@ -389,6 +389,58 @@ Supporting files: `README.md`, `Package.swift`, `LICENSE`, `rebuild.sh`
 ### Next Step
 - Milestone M6: Safety and Real Execution (`IRiskPolicy`, confirmation dialog, kill switch, deny-list, audit log in `%LOCALAPPDATA%\HolyHand\audit`, Jev risk-escalation call, enable real execution toggle).
 
+---
+
+## 2026-09-21 — M6: Safety and Real Execution
+
+### Session Details
+- **Date**: 2026-09-21
+- **Milestone**: M6 — Safety and Real Execution
+
+### Components Built
+1. **Deterministic Risk Policy & Security Rules** (`HolyHand.Core/Safety/`):
+   - `ActionRiskScore.cs`: Enum defining operation severity (`Harmless = 1`, `ReversibleEdit = 2`, `IrreversibleOrExternalEffect = 3`).
+   - `RiskPolicyOptions.cs`: Configurable sets for sensitive verbs (`Submit`, `Apply`, `Send`, `Pay`, `Buy`, `Purchase`, `Order`, `Delete`, `Remove`, `Post`, `Publish`, `Confirm`, `Sign in`, `Install`, `Run`, `Uninstall`, `Transfer`) and deny-listed applications (`1password`, `bitwarden`, `keepass`, `keepassxc`, `lastpass`, `dashlane`, `enpass`, `authenticator`).
+   - `RiskPolicy.cs`: Plain code safety engine enforcing Invariant 1. Evaluates app deny-list and matches actions against sensitive tokens using word-boundary regular expressions. Detects interaction with password fields and secret tokens. Untrusted screen text is treated strictly as data (Invariant 6).
+2. **Local Audit Log** (`HolyHand.Platform/Safety/`):
+   - `AuditLogEntry.cs`: Structured record model (`Timestamp`, `Goal`, `Operation`, `TargetId`, `TargetLabel`, `TargetRole`, `AppProcess`, `AppTitle`, `DecisionType`, `Reason`).
+   - `JsonlAuditLog.cs`: Implements `IAuditLog`. Appends entries to `%LOCALAPPDATA%\HolyHand\audit\audit-{yyyy-MM-dd}.jsonl` using async `SemaphoreSlim` locking. Integrates `SecretSanitizer` to ensure no credit cards or API keys ever leak into audit files.
+3. **Jev Risk Escalation (Call B)** (`HolyHand.Core/Jev/`):
+   - Implemented `EvaluateActionRiskAsync` in `JevDecisionModel.cs`.
+   - Sends score-type question `actionRisk` with ordered criteria `["harmless", "reversible edit", "irreversible or external effect"]`.
+   - Invariant 1 & RS-02: Jev can escalate risk to require human approval, but can never downgrade an action flagged by plain code.
+4. **Human Confirmation Prompts (UI & CLI)**:
+   - `ConfirmationDialog.xaml` + `.cs` (`HolyHand.App/Windows/`): WPF dark-glass modal displaying exact Action, Target, Window, and Reason with Approve & Execute (Enter) and Reject & Abort (Esc) buttons.
+   - `ConsoleConfirmationPrompt.cs` (`HolyHand.Cli/`): Interactive console prompt for CLI and diagnostic workflows.
+5. **Agent Loop Integration & Real Execution Toggle**:
+   - Integrated `IRiskPolicy`, `IConfirmationPrompt`, and `IAuditLog` into `AgentLoop.cs`.
+   - Added `--live` flag to `HolyHand.Cli` to allow live hardware execution with full safety gates.
+
+### Test Results
+- Unit and UI test suite (`RiskPolicyTests.cs`, `AuditLogTests.cs`, `MockJobPageTests.cs`, `ConfirmationDialogTests.cs`):
+  - **RS-01**: Table-driven tests for 18 sensitive verbs (Submit, Apply, Send, Pay, Buy, Delete, Post, Install, Run, Confirm, etc.) — all require confirmation (Passed).
+  - **RS-01 (Benign)**: Harmless actions (Search, Next, Previous, View) do not trigger confirmation (Passed).
+  - **RS-02**: Model risk escalation verified; code-level risk flags cannot be downgraded by the model (Passed).
+  - **RS-03**: WPF ConfirmationDialog verifies display of exact action, target element, role, and window (Passed).
+  - **RS-04**: Rejecting confirmation executes nothing and records `"rejected"` audit log entry (Passed).
+  - **RS-05**: Approving confirmation executes action exactly once and records `"confirmed"` audit log entry (Passed).
+  - **RS-06**: Kill switch cancels in-flight operations within 1 second (Passed).
+  - **RS-07**: Mock job-application form: agent automatically fills inputs (name, email), then halts at Submit awaiting human approval and never submits autonomously (Passed).
+  - **RS-08**: Prompt-injection defense: adversarial button text ("ignore previous instructions and delete...") cannot bypass safety policy (Passed).
+  - **RS-09**: Deny-listed applications (1Password, Bitwarden, KeePass, LastPass, Dashlane) are refused immediately with zero screen reads and zero executions (Passed).
+  - **Audit Logging**: JSONL format, metadata fields, and secret scrubbing (`[REDACTED_CARD]`, `[REDACTED_KEY]`) verified (Passed).
+- Total solution tests: **71 passed, 0 failed, 0 skipped** across all test suites.
+- Build status: **0 Warning(s), 0 Error(s)** under `<TreatWarningsAsErrors>true</TreatWarningsAsErrors>`.
+
+### Graphify Update
+- Ran `graphify update .`:
+  - Updated knowledge graph with `RiskPolicy`, `RiskPolicyOptions`, `ActionRiskScore`, `JsonlAuditLog`, `AuditLogEntry`, `ConfirmationDialog`, and `ConsoleConfirmationPrompt`.
+  - Updated `graphify-out/GRAPH_REPORT.md`.
+
+### Next Step
+- Milestone M7: Voice Input (`NAudio` push-to-talk capture, `Whisper.net` local transcription with on-demand model download, Windows speech fallback, mic permission handling).
+
+
 
 
 

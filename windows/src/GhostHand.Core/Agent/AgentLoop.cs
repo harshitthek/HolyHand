@@ -1,5 +1,6 @@
 using HolyHand.Core.Interfaces;
 using HolyHand.Core.Models;
+using HolyHand.Core.Safety;
 using Microsoft.Extensions.Logging;
 
 namespace HolyHand.Core.Agent;
@@ -77,6 +78,9 @@ public class AgentLoop
     private readonly IActionExecutor _actionExecutor;
     private readonly AgentLoopOptions _options;
     private readonly ILogger<AgentLoop> _logger;
+    private readonly IRiskPolicy _riskPolicy;
+    private readonly IConfirmationPrompt? _confirmationPrompt;
+    private readonly IAuditLog? _auditLog;
 
     public event Action<string>? StatusChanged;
     public event Action<int, AgentDecision, ActionResult>? StepCompleted;
@@ -86,13 +90,19 @@ public class AgentLoop
         IDecisionModel decisionModel,
         IActionExecutor actionExecutor,
         AgentLoopOptions options,
-        ILogger<AgentLoop> logger)
+        ILogger<AgentLoop> logger,
+        IRiskPolicy? riskPolicy = null,
+        IConfirmationPrompt? confirmationPrompt = null,
+        IAuditLog? auditLog = null)
     {
         _screenReader = screenReader;
         _decisionModel = decisionModel;
         _actionExecutor = actionExecutor;
         _options = options;
         _logger = logger;
+        _riskPolicy = riskPolicy ?? new RiskPolicy();
+        _confirmationPrompt = confirmationPrompt;
+        _auditLog = auditLog;
     }
 
     public async Task<AgentRunResult> RunAsync(
@@ -106,6 +116,28 @@ public class AgentLoop
 
         _logger.LogInformation("Starting AgentLoop for goal '{Goal}' on target '{Target}' (DryRun: {DryRun})",
             goal, target.ProcessName, _options.DryRun);
+
+        // Security check: verify if target process is deny-listed
+        if (_riskPolicy.IsAppDenied(target, out var denyReason))
+        {
+            _logger.LogWarning("App deny-list triggered: {Reason}", denyReason);
+            NotifyStatus($"Security policy refusal: {denyReason}");
+
+            if (_auditLog != null)
+            {
+                await _auditLog.LogAsync(new AuditLogEntry
+                {
+                    Goal = goal,
+                    Operation = AgentOperation.AskUser,
+                    AppProcess = target.ProcessName,
+                    AppTitle = target.WindowTitle,
+                    DecisionType = "denied",
+                    Reason = denyReason
+                }, CancellationToken.None);
+            }
+
+            return AgentRunResult.Failed(0, history, denyReason);
+        }
 
         try
         {
@@ -156,7 +188,106 @@ public class AgentLoop
                     ? elements.FirstOrDefault(e => e.Id == decision.TargetId)
                     : null;
 
-                // 7. Execute action (Dry-run or live)
+                // 7. Safety Invariants: Deterministic Risk Policy + Jev Risk Escalation
+                bool requiresConfirmation = _riskPolicy.RequiresConfirmation(decision, targetElement, target, out var riskReason);
+
+                // Jev Call B: If deterministic code policy deemed it safe, ask Jev for risk escalation
+                if (!requiresConfirmation && decision.Operation is not (AgentOperation.Done or AgentOperation.AskUser or AgentOperation.Wait))
+                {
+                    try
+                    {
+                        var riskScore = await _decisionModel.EvaluateActionRiskAsync(goal, target, decision, targetElement, cancellationToken);
+                        if (riskScore == ActionRiskScore.IrreversibleOrExternalEffect)
+                        {
+                            requiresConfirmation = true;
+                            riskReason = "Model escalated risk: Irreversible or external effect detected.";
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogDebug(ex, "Failed to evaluate Jev Call B risk. Proceeding with deterministic verdict.");
+                    }
+                }
+
+                // Human confirmation gate
+                if (requiresConfirmation)
+                {
+                    NotifyStatus($"Safety confirmation required: {riskReason}");
+
+                    bool approved = false;
+                    if (_confirmationPrompt != null)
+                    {
+                        approved = await _confirmationPrompt.RequestConfirmationAsync(
+                            decision,
+                            targetElement,
+                            target,
+                            riskReason,
+                            cancellationToken);
+                    }
+
+                    if (!approved)
+                    {
+                        _logger.LogInformation("Action '{Operation}' on '{Target}' rejected by human.",
+                            decision.Operation, targetElement?.DisplayLabel ?? decision.TargetId);
+
+                        if (_auditLog != null)
+                        {
+                            await _auditLog.LogAsync(new AuditLogEntry
+                            {
+                                Goal = goal,
+                                Operation = decision.Operation,
+                                TargetId = decision.TargetId,
+                                TargetLabel = targetElement?.DisplayLabel ?? decision.TargetLabel,
+                                TargetRole = targetElement?.DisplayRole,
+                                AppProcess = target.ProcessName,
+                                AppTitle = target.WindowTitle,
+                                DecisionType = "rejected",
+                                Reason = riskReason
+                            }, cancellationToken);
+                        }
+
+                        NotifyStatus("Action rejected. Execution halted.");
+                        return AgentRunResult.NeedsHumanInput(step, history, $"Action rejected by human: {riskReason}");
+                    }
+
+                    // Approved by human
+                    if (_auditLog != null)
+                    {
+                        await _auditLog.LogAsync(new AuditLogEntry
+                        {
+                            Goal = goal,
+                            Operation = decision.Operation,
+                            TargetId = decision.TargetId,
+                            TargetLabel = targetElement?.DisplayLabel ?? decision.TargetLabel,
+                            TargetRole = targetElement?.DisplayRole,
+                            AppProcess = target.ProcessName,
+                            AppTitle = target.WindowTitle,
+                            DecisionType = "confirmed",
+                            Reason = riskReason
+                        }, cancellationToken);
+                    }
+                }
+                else
+                {
+                    // Auto-approved harmless action
+                    if (_auditLog != null)
+                    {
+                        await _auditLog.LogAsync(new AuditLogEntry
+                        {
+                            Goal = goal,
+                            Operation = decision.Operation,
+                            TargetId = decision.TargetId,
+                            TargetLabel = targetElement?.DisplayLabel ?? decision.TargetLabel,
+                            TargetRole = targetElement?.DisplayRole,
+                            AppProcess = target.ProcessName,
+                            AppTitle = target.WindowTitle,
+                            DecisionType = "auto",
+                            Reason = "Harmless action allowed by safety policy."
+                        }, cancellationToken);
+                    }
+                }
+
+                // 8. Execute action (Dry-run or live)
                 var actionLabel = targetElement != null ? $"'{targetElement.DisplayLabel}'" : decision.TargetId;
                 NotifyStatus($"Step {step}/{_options.MaxSteps}: {decision.Operation} on {actionLabel}");
 

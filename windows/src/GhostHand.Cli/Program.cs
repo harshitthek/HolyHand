@@ -3,8 +3,10 @@ using HolyHand.Core.Agent;
 using HolyHand.Core.Common;
 using HolyHand.Core.Jev;
 using HolyHand.Core.Models;
+using HolyHand.Core.Safety;
 using HolyHand.Core.ScreenReading;
 using HolyHand.Platform.Execution;
+using HolyHand.Platform.Safety;
 using HolyHand.Platform.ScreenReading;
 using HolyHand.Platform.Windowing;
 using Microsoft.Extensions.Logging;
@@ -33,6 +35,7 @@ public static class Program
             "check" => await RunCheckAsync(),
             "snapshot" => await RunSnapshotAsync(args),
             "dry-run" => await RunDryRunAsync(args),
+            "run" => await RunDryRunAsync(args),
             _ => PrintUnknownCommand(command)
         };
     }
@@ -45,6 +48,7 @@ public static class Program
         Console.WriteLine("  check      Verify toolchain, credentials, and Jev connectivity");
         Console.WriteLine("  snapshot   Capture and display UIA element tree of frontmost window");
         Console.WriteLine("  dry-run    Run task in dry-run mode without executing actions");
+        Console.WriteLine("  run        Run task with live execution (use --live for real input)");
     }
 
     private static async Task<int> RunCheckAsync()
@@ -267,11 +271,18 @@ public static class Program
 
     private static async Task<int> RunDryRunAsync(string[] args)
     {
-        var goal = args.Length > 1 ? args[1] : "search for Adele";
-        Console.WriteLine("HolyHand Agent Loop — DRY-RUN MODE");
+        bool isLive = args.Any(a => string.Equals(a, "--live", StringComparison.OrdinalIgnoreCase));
+        var nonFlagArgs = args.Where(a => !a.StartsWith("--")).ToArray();
+        var goal = nonFlagArgs.Length > 1 ? nonFlagArgs[1] : "search for Adele";
+
+        Console.WriteLine(isLive
+            ? "HolyHand Agent Loop — LIVE EXECUTION MODE"
+            : "HolyHand Agent Loop — DRY-RUN MODE");
         Console.WriteLine("--------------------------------------------------------------------------------");
         Console.WriteLine($"Goal: \"{goal}\"");
-        Console.WriteLine("Executing in simulated mode (no physical mouse/keyboard input will be sent).\n");
+        Console.WriteLine(isLive
+            ? "WARNING: Executing in LIVE mode. Physical inputs will be performed. Sensitive actions will require confirmation.\n"
+            : "Executing in simulated mode (no physical mouse/keyboard input will be sent).\n");
 
         Console.WriteLine("Focus the target window (waiting 2 seconds)...");
         await Task.Delay(2000);
@@ -303,16 +314,28 @@ public static class Program
 
         var ocrService = new WindowsOcrService(ocrLogger);
         using var screenReader = new UiaScreenReader(ScreenReaderOptions.Default, ocrService, readerLogger);
-        using var actionExecutor = new ActionExecutor(execLogger, dryRun: true);
+        using var actionExecutor = new ActionExecutor(execLogger, dryRun: !isLive);
 
         var loopOptions = new AgentLoopOptions
         {
-            DryRun = true,
+            DryRun = !isLive,
             MaxSteps = 10,
             MaxConsecutiveStalls = 3
         };
 
-        var loop = new AgentLoop(screenReader, decisionModel, actionExecutor, loopOptions, loopLogger);
+        using var auditLog = new JsonlAuditLog();
+        var riskPolicy = new RiskPolicy();
+        var confirmationPrompt = new ConsoleConfirmationPrompt();
+
+        var loop = new AgentLoop(
+            screenReader,
+            decisionModel,
+            actionExecutor,
+            loopOptions,
+            loopLogger,
+            riskPolicy,
+            confirmationPrompt,
+            auditLog);
 
         loop.StatusChanged += msg =>
         {

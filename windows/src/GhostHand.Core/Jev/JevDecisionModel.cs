@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using HolyHand.Core.Interfaces;
 using HolyHand.Core.Models;
+using HolyHand.Core.Safety;
 using Microsoft.Extensions.Logging;
 
 namespace HolyHand.Core.Jev;
@@ -148,6 +149,77 @@ public class JevDecisionModel : IDecisionModel
         }
 
         return false;
+    }
+
+    public async Task<ActionRiskScore> EvaluateActionRiskAsync(
+        string goal,
+        AppTarget target,
+        AgentDecision decision,
+        AccessibilityElement? targetElement,
+        CancellationToken cancellationToken = default)
+    {
+        // Benign agent control flow actions are harmless
+        if (decision.Operation is AgentOperation.Done or AgentOperation.AskUser or AgentOperation.Wait)
+        {
+            return ActionRiskScore.Harmless;
+        }
+
+        var state = new
+        {
+            task = Truncate(goal, 4000),
+            app = Truncate(target.ProcessName, 100),
+            window = Truncate(target.WindowTitle, 150),
+            proposedAction = new
+            {
+                operation = decision.Operation.ToString(),
+                targetId = decision.TargetId,
+                targetRole = targetElement?.DisplayRole ?? "Unknown",
+                targetLabel = Truncate(targetElement?.DisplayLabel ?? decision.TargetLabel ?? "None", 200),
+                textValue = decision.TextValue != null ? Truncate(decision.TextValue, 100) : null
+            }
+        };
+
+        var request = new EvaluateRequest
+        {
+            Model = _options.ModelId,
+            State = state,
+            Questions = new Dictionary<string, QuestionDefinition>
+            {
+                ["actionRisk"] = QuestionDefinition.Score(
+                    new List<string> { "harmless", "reversible edit", "irreversible or external effect" },
+                    "Rate the risk of this proposed user-interface action from lowest (harmless UI navigation) to highest (irreversible external effect, submission, payment, deletion, or external data transmission).")
+            },
+            ProviderOptions = new GatewayProviderOptions
+            {
+                Gateway = new GatewayOptions { ZeroDataRetention = _options.ZeroDataRetention ? true : null }
+            }
+        };
+
+        try
+        {
+            var response = await _jevClient.EvaluateAsync(request, cancellationToken);
+            if (response.TryGetScoreAnswer("actionRisk", out var score, out var probabilities))
+            {
+                _logger.LogInformation("Jev evaluated action risk: Score {Score}, probabilities: [{Probs}]",
+                    score, string.Join(", ", probabilities.Select(p => $"{p:P0}")));
+
+                if (score >= 3 || (score == 2 && probabilities.Count == 3 && probabilities[2] >= 0.5))
+                {
+                    return ActionRiskScore.IrreversibleOrExternalEffect;
+                }
+                else if (score == 2 || score == 1)
+                {
+                    return ActionRiskScore.ReversibleEdit;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to evaluate action risk via Jev. Defaulting to ReversibleEdit.");
+            return ActionRiskScore.ReversibleEdit;
+        }
+
+        return ActionRiskScore.Harmless;
     }
 
     private static Dictionary<string, string> BuildCandidateChoices(string goal, IReadOnlyList<AccessibilityElement> elements)

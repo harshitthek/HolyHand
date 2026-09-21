@@ -42,11 +42,11 @@
 | W2 | Start menu suppression | done (tested) | LowLevelKeyboardHook.cs | VK 0xE8 injection before Win release |
 | W3 | Fallback hotkey (Ctrl+Alt+Space) | not started | — | RegisterHotKey |
 | W4 | Kill switch (second press = cancel) | done (tested) | ChordStateMachineTests.cs | Second press while run active emits Cancel |
-| W5 | Risk policy (deterministic) | not started | — | IRiskPolicy with sensitive-verb set |
-| W6 | Confirmation dialog | not started | — | WPF with action/target/window |
-| W7 | Jev risk escalation call | done (tested) | QuestionDefinition.cs | Score type question builder for /v1/evaluate |
-| W8 | Audit log (JSONL) | not started | — | %LOCALAPPDATA%\HolyHand\audit |
-| W9 | Per-app deny-list | not started | — | Config-driven |
+| W5 | Risk policy (deterministic) | done (tested) | RiskPolicyTests.cs | Sensitive-verb set (RS-01), cannot downgrade (RS-02) |
+| W6 | Confirmation dialog | done (tested) | ConfirmationDialogTests.cs | WPF dark-glass modal (RS-03) + ConsoleConfirmationPrompt |
+| W7 | Jev risk escalation call | done (tested) | JevDecisionModel.cs, RiskPolicyTests.cs | Call B score evaluation escalates harmless actions (RS-02) |
+| W8 | Audit log (JSONL) | done (tested) | JsonlAuditLog.cs, AuditLogTests.cs | Local audit in %LOCALAPPDATA%\HolyHand\audit with secret redaction |
+| W9 | Per-app deny-list | done (tested) | RiskPolicyTests.cs | Blocks 1Password, Bitwarden, KeePass, etc. (RS-09) |
 | W10 | Elevated target (UIPI) detection | done (tested) | WindowCaptureService.cs | Process integrity level & access check |
 | W11 | Voice input (Whisper.net) | not started | — | NAudio + whisper.cpp |
 | W12 | Dry-run mode (default) | done (tested) | AgentLoop.cs, HolyHand.Cli | Simulated execution default until M6; CLI dry-run tool |

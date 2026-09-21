@@ -11,6 +11,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\HolyHand.Core\HolyHand.Core.csproj" />
     <ProjectReference Include="..\..\src\HolyHand.Platform\HolyHand.Platform.csproj" />
+    <ProjectReference Include="..\..\src\HolyHand.App\HolyHand.App.csproj" />
   </ItemGroup>
 
   <ItemGroup>

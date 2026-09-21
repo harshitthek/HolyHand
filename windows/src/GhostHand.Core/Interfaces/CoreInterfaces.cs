@@ -1,4 +1,5 @@
 using HolyHand.Core.Models;
+using HolyHand.Core.Safety;
 
 namespace HolyHand.Core.Interfaces;
 
@@ -22,6 +23,13 @@ public interface IDecisionModel
         IReadOnlyList<AccessibilityElement> elements,
         IReadOnlyList<string> history,
         CancellationToken cancellationToken = default);
+
+    Task<ActionRiskScore> EvaluateActionRiskAsync(
+        string goal,
+        AppTarget target,
+        AgentDecision decision,
+        AccessibilityElement? targetElement,
+        CancellationToken cancellationToken = default);
 }
 
 public interface IActionExecutor
@@ -42,12 +50,23 @@ public interface IHotkeyService : IDisposable
 
 public interface IRiskPolicy
 {
+    bool IsAppDenied(AppTarget appTarget, out string reason);
     bool RequiresConfirmation(AgentDecision decision, AccessibilityElement? target, AppTarget appTarget, out string reason);
+}
+
+public interface IConfirmationPrompt
+{
+    Task<bool> RequestConfirmationAsync(
+        AgentDecision decision,
+        AccessibilityElement? target,
+        AppTarget appTarget,
+        string reason,
+        CancellationToken cancellationToken = default);
 }
 
 public interface IAuditLog
 {
-    Task LogAsync(string goal, AgentDecision decision, string decisionType, CancellationToken cancellationToken = default);
+    Task LogAsync(AuditLogEntry entry, CancellationToken cancellationToken = default);
 }
 
 public interface ICredentialStore
