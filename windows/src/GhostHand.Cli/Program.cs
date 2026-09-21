@@ -284,10 +284,48 @@ public static class Program
             ? "WARNING: Executing in LIVE mode. Physical inputs will be performed. Sensitive actions will require confirmation.\n"
             : "Executing in simulated mode (no physical mouse/keyboard input will be sent).\n");
 
-        Console.WriteLine("Focus the target window (waiting 2 seconds)...");
-        await Task.Delay(2000);
+        string? targetName = null;
+        for (int i = 0; i < args.Length - 1; i++)
+        {
+            if (string.Equals(args[i], "--target", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(args[i], "--process", StringComparison.OrdinalIgnoreCase))
+            {
+                targetName = args[i + 1];
+                break;
+            }
+        }
 
-        var target = WindowCaptureService.CaptureCurrentForegroundWindow();
+        AppTarget? target = null;
+        if (!string.IsNullOrEmpty(targetName))
+        {
+            target = WindowCaptureService.CaptureWindowByProcessName(targetName);
+            if (target != null)
+            {
+                Console.WriteLine($"Found '{targetName}' (PID {target.ProcessId}). Bringing window to foreground...");
+                Windows.Win32.PInvoke.SetForegroundWindow((Windows.Win32.Foundation.HWND)target.WindowHandle);
+                await Task.Delay(500);
+            }
+            else
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine($"No running process found matching '{targetName}'. Falling back to active window.\n");
+                Console.ResetColor();
+            }
+        }
+
+        if (target == null)
+        {
+            Console.WriteLine("Click on your target window now (waiting 3 seconds)...");
+            for (int countdown = 3; countdown > 0; countdown--)
+            {
+                Console.Write($"{countdown}... ");
+                await Task.Delay(1000);
+            }
+            Console.WriteLine("Capturing!\n");
+
+            target = WindowCaptureService.CaptureCurrentForegroundWindow();
+        }
+
         if (target == null || target.WindowHandle == IntPtr.Zero)
         {
             Console.ForegroundColor = ConsoleColor.Red;
@@ -299,6 +337,16 @@ public static class Program
         Console.ForegroundColor = ConsoleColor.Cyan;
         Console.WriteLine($"Target Window: \"{target.WindowTitle}\" ({target.ProcessName}, PID {target.ProcessId})\n");
         Console.ResetColor();
+
+        if (target.ProcessName.Contains("antigravity", StringComparison.OrdinalIgnoreCase) ||
+            target.ProcessName.Contains("powershell", StringComparison.OrdinalIgnoreCase) ||
+            target.ProcessName.Contains("cmd", StringComparison.OrdinalIgnoreCase))
+        {
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine($"[NOTE] Captured '{target.ProcessName}'. If you meant to automate another window (like Notepad),");
+            Console.WriteLine($"be sure to click on that window during the countdown, or use '--target notepad'.\n");
+            Console.ResetColor();
+        }
 
         using var loggerFactory = LoggerFactory.Create(b => b.AddConsole().SetMinimumLevel(LogLevel.Warning));
         var ocrLogger = loggerFactory.CreateLogger<WindowsOcrService>();
