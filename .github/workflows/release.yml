@@ -50,35 +50,8 @@ jobs:
         shell: pwsh
         run: |
           Copy-Item -Path ".env.example" -Destination "release-pkg/HolyHand-win-x64/.env.example"
-          
-          @"
-          @echo off
-          title HolyHand Launcher
-          cd /d "%~dp0"
-          echo Starting HolyHand (Windows Native Desktop Assistant)...
-          echo Press Ctrl + Win to activate!
-          start "" "%~dp0HolyHand.App.exe"
-          exit
-          "@ | Out-File -FilePath "release-pkg/HolyHand-win-x64/START_HOLYHAND.bat" -Encoding ascii
-
-          @"
-          @echo off
-          title HolyHand AI Gateway Check
-          cd /d "%~dp0"
-          echo Testing connection to Vercel AI Gateway (Jev model)...
-          "%~dp0HolyHand.Cli.exe" check
-          pause
-          "@ | Out-File -FilePath "release-pkg/HolyHand-win-x64/CHECK_CONNECTION.bat" -Encoding ascii
-
-          @"
-          HolyHand (Windows) - AI Desktop Assistant
-          =========================================
-          1. Copy .env.example to .env and add your AI_GATEWAY_API_KEY.
-          2. Double-click START_HOLYHAND.bat (or HolyHand.App.exe).
-          3. Focus any app and press Ctrl + Win to trigger!
-          "@ | Out-File -FilePath "release-pkg/HolyHand-win-x64/README.txt" -Encoding ascii
-
-          $tag = if ("${{ github.ref_name }}") { "${{ github.ref_name }}" } else { "v0.1.0" }
+          Copy-Item -Path "windows/packaging/*" -Destination "release-pkg/HolyHand-win-x64/" -Force
+          $tag = if ($env:GITHUB_REF_NAME) { $env:GITHUB_REF_NAME } else { "v0.1.0" }
           Compress-Archive -Path "release-pkg/HolyHand-win-x64/*" -DestinationPath "HolyHand-$tag-win-x64.zip" -Force
 
       - name: Create GitHub Release
