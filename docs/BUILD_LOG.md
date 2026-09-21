@@ -440,6 +440,36 @@ Supporting files: `README.md`, `Package.swift`, `LICENSE`, `rebuild.sh`
 ### Next Step
 - Milestone M7: Voice Input (`NAudio` push-to-talk capture, `Whisper.net` local transcription with on-demand model download, Windows speech fallback, mic permission handling).
 
+---
+
+## 2026-09-21 — Packaging & Release Distribution (M8 Preview)
+
+### Session Details
+- **Date**: 2026-09-21
+- **Focus**: Standalone distribution packaging, AppContext environment loader, and automated GitHub Release workflow.
+
+### Components Built
+1. **AppContext Environment Loading** (`HolyHand.Core/Common/EnvLoader.cs`):
+   - Added support for `AppContext.BaseDirectory` so double-clicked executables in File Explorer or shortcuts automatically discover their adjacent `.env` file without relying on working directory inheritance.
+2. **Distribution Package**:
+   - Published self-contained `win-x64` ReadyToRun builds of `HolyHand.App.exe` and `HolyHand.Cli.exe` to `publish/HolyHand-win-x64/`.
+   - Bundled:
+     - `START_HOLYHAND.bat`: One-click launcher for background desktop assistant.
+     - `CHECK_CONNECTION.bat`: One-click Vercel AI Gateway diagnostic test.
+     - `README.txt`: Plain-text quick start and hotkey guide (`Ctrl + Win`).
+     - `.env.example`: Configuration template for end users.
+   - Packaged distribution archive: `publish/HolyHand-v0.1.0-win-x64.zip` (87.6 MB self-contained, no .NET install required).
+3. **Automated GitHub Workflows** (`.github/workflows/`):
+   - `ci.yml`: Automated build and test pipeline on `windows-latest` for PRs and pushes to `main`.
+   - `release.yml`: Automated GitHub release pipeline triggered on `v*` tag pushes or manual `workflow_dispatch`, building self-contained ReadyToRun binaries and attaching `HolyHand-<tag>-win-x64.zip` directly to the GitHub Release.
+4. **Git Repository Sync**:
+   - Pushed all workflows, packaging improvements, and configuration to `HolyHand.git` (`main`).
+
+### Validation
+- All 71 unit and integration tests passing.
+- Verified packaged `HolyHand.Cli.exe check` against live Vercel AI Gateway: latency 1486ms, exit code 0.
+
+
 
 
 
