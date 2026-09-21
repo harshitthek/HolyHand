@@ -9,6 +9,7 @@ Third Hand.app/
 # Local credentials and diagnostics
 .env
 .env.*
+!.env.example
 *.log
 *.p12
 *.pfx

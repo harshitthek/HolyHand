@@ -49,8 +49,12 @@ jobs:
       - name: Bundle distribution files
         shell: pwsh
         run: |
-          Copy-Item -Path ".env.example" -Destination "release-pkg/HolyHand-win-x64/.env.example"
-          Copy-Item -Path "windows/packaging/*" -Destination "release-pkg/HolyHand-win-x64/" -Force
+          if (Test-Path ".env.example") {
+            Copy-Item -Path ".env.example" -Destination "release-pkg/HolyHand-win-x64/.env.example" -Force
+          }
+          if (Test-Path "windows/packaging") {
+            Copy-Item -Path "windows/packaging/*" -Destination "release-pkg/HolyHand-win-x64/" -Force -Recurse
+          }
           $tag = if ($env:GITHUB_REF_NAME) { $env:GITHUB_REF_NAME } else { "v0.1.0" }
           Compress-Archive -Path "release-pkg/HolyHand-win-x64/*" -DestinationPath "HolyHand-$tag-win-x64.zip" -Force
 
@@ -58,6 +62,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           files: HolyHand-*-win-x64.zip
           draft: false
           prerelease: false
