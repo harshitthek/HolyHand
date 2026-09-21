@@ -14,5 +14,9 @@ Third Hand.app/
 *.pfx
 *.key
 
-# Release archives
+# Release archives and publish output
 dist/
+publish/
+bin/
+obj/
+*.zip

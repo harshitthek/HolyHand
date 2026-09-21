@@ -8,20 +8,37 @@ public static class EnvLoader
 {
     public static void Load(string? directoryPath = null)
     {
-        var searchDir = directoryPath ?? Directory.GetCurrentDirectory();
-        
-        // Check current directory, then parent directories up to 3 levels
-        string? envPath = null;
-        var dir = new DirectoryInfo(searchDir);
-        for (int i = 0; i < 4 && dir != null; i++)
+        var searchDirs = new List<string>();
+        if (!string.IsNullOrEmpty(directoryPath))
         {
-            var candidate = Path.Combine(dir.FullName, ".env");
-            if (File.Exists(candidate))
+            searchDirs.Add(directoryPath);
+        }
+        else
+        {
+            searchDirs.Add(AppContext.BaseDirectory);
+            if (!string.Equals(Directory.GetCurrentDirectory(), AppContext.BaseDirectory, StringComparison.OrdinalIgnoreCase))
             {
-                envPath = candidate;
-                break;
+                searchDirs.Add(Directory.GetCurrentDirectory());
             }
-            dir = dir.Parent;
+        }
+
+        string? envPath = null;
+        foreach (var baseDir in searchDirs)
+        {
+            var dir = new DirectoryInfo(baseDir);
+            for (int i = 0; i < 4 && dir != null; i++)
+            {
+                var candidate = Path.Combine(dir.FullName, ".env");
+                if (File.Exists(candidate))
+                {
+                    envPath = candidate;
+                    break;
+                }
+                dir = dir.Parent;
+            }
+
+            if (envPath != null)
+                break;
         }
 
         if (envPath == null || !File.Exists(envPath))
