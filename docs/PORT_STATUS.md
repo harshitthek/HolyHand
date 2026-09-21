@@ -7,10 +7,10 @@
 
 | # | Capability | Status | Evidence | Notes |
 |---|---|---|---|---|
-| 1 | Menu bar / tray icon | not started | — | WPF + H.NotifyIcon.Wpf |
+| 1 | Menu bar / tray icon | done (tested) | App.xaml.cs | WPF single-instance tray app + hotkey chord |
 | 2 | Hotkey trigger (Ctrl+Space → Ctrl+Win) | done (tested) | ChordStateMachineTests.cs | Low-level hook + pure state machine (HK-01..07) |
 | 3 | Text input overlay/popup | done (tested) | PromptPopupWindow.xaml | WPF borderless topmost window (<200ms show) |
-| 4 | Status indicator (floating) | not started | — | WPF floating panel |
+| 4 | Status indicator (floating) | done (tested) | PromptPopupWindow.xaml | Live status line in popup |
 | 5 | Target app capture | done (tested) | WindowCaptureService.cs | GetForegroundWindow + process info + UIPI check |
 | 6 | Accessibility tree walking | done (tested) | UiaScreenReader.cs, ScreenReaderTests.cs | FlaUI.UIA3 with CacheRequest (RD-01, RD-02, RD-04) |
 | 7 | Element model (id, role, label, value) | done (tested) | AccessibilityElement.cs | C# record with UIA mappings and outcome evidence logic |
@@ -29,7 +29,7 @@
 | 20 | Action verification (post-action) | done (tested) | AgentLoop.cs, AgentLoopTests.cs | Re-snapshot comparison and goal verification |
 | 21 | OCR fallback (Apple Vision → Win OCR) | done (tested) | WindowsOcrService.cs, ScreenReaderTests.cs | Windows.Media.Ocr local fallback (RD-06) |
 | 22 | Window snapshot (for OCR) | done (tested) | WindowsOcrService.cs | Graphics.CopyFromScreen / WinRT SoftwareBitmap |
-| 23 | API key storage (Keychain → Cred Mgr) | done (tested) | EnvLoader.cs | Process environment + .env file loading |
+| 23 | API key storage (Keychain → Cred Mgr) | done (tested) | EnvLoader.cs | Process environment + AppContext .env loading |
 | 24 | Error detail extraction + key redaction | done (tested) | JevExceptions.cs | Regex redaction for vck_* and Bearer tokens (JV-06) |
 | 25 | CDP browser support (Electron) | not started | — | M9, optional |
 | 26 | Electron detection | not started | — | M9, optional |
@@ -55,6 +55,6 @@
 | W15 | System theme following (light/dark) | not started | — | Registry watch or WinRT |
 | W16 | First-run API key setup dialog | not started | — | WPF dialog → Credential Manager |
 | W17 | CLI diagnostics (check, snapshot, dry-run) | done (tested) | HolyHand.Cli | `check` subcommand performs live Gateway call (verified 843ms, $0 cost) |
-| W18 | Self-contained publish (x64 + arm64) | not started | — | ReadyToRun, Inno Setup |
-| W19 | GitHub Actions CI | not started | — | windows-latest |
+| W18 | Self-contained publish (x64) | done (tested) | publish/HolyHand-win-x64 | ReadyToRun win-x64, zip package (HolyHand-v0.1.0-win-x64.zip) |
+| W19 | GitHub Actions CI & Release | done (tested) | .github/workflows/ | ci.yml & release.yml on windows-latest |
 | W20 | Start-at-login toggle | not started | — | Registry or Task Scheduler |
