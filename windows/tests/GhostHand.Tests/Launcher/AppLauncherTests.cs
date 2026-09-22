@@ -14,20 +14,19 @@ public class AppLauncherTests
     private readonly AppLauncher _launcher = new();
 
     [Theory]
-    [InlineData("open settings", "settings", "ms-settings:")]
-    [InlineData("please open windows settings", "windows settings", "ms-settings:")]
-    [InlineData("launch notepad", "notepad", "notepad.exe")]
-    [InlineData("start calculator and calculate 5 + 5", "calculator", "calc.exe")]
-    [InlineData("open chrome and search for Adele", "chrome", "chrome.exe")]
-    [InlineData("open file explorer", "file explorer", "explorer.exe")]
-    [InlineData("open task manager", "task manager", "taskmgr.exe")]
-    public void AL01_TryExtractAppLaunch_RecognizesValidAppsAndCommands(string goal, string expectedApp, string expectedCommand)
+    [InlineData("launch notepad", "notepad")]
+    [InlineData("start calculator and calculate 5 + 5", "calculator")]
+    [InlineData("open chrome and search for Adele", "chrome")]
+    [InlineData("open file explorer", "file explorer")]
+    [InlineData("open task manager", "task manager")]
+    [InlineData("open blender and render", "blender")]
+    [InlineData("switch to discord and send message", "discord")]
+    public void AL01_TryExtractAppLaunch_RecognizesValidAppsWithoutHardcoding(string goal, string expectedApp)
     {
-        bool success = _launcher.TryExtractAppLaunch(goal, out var appName, out var launchCommand);
+        bool success = _launcher.TryExtractAppLaunch(goal, out var appName, out _);
 
         success.Should().BeTrue();
         appName.ToLowerInvariant().Should().Be(expectedApp.ToLowerInvariant());
-        launchCommand.ToLowerInvariant().Should().Be(expectedCommand.ToLowerInvariant());
     }
 
     [Theory]
@@ -55,8 +54,8 @@ public class AppLauncherTests
     [Fact]
     public void AL04_CandidateChoices_IncludeOpenAppAndOpenUrl_WhenPresentInGoal()
     {
-        var candidates = JevDecisionModel.ExtractAppLaunchCandidates("open settings");
-        candidates.Should().Contain(c => c.Equals("settings", StringComparison.OrdinalIgnoreCase));
+        var candidates = JevDecisionModel.ExtractAppLaunchCandidates("open obsidian");
+        candidates.Should().Contain(c => c.Equals("obsidian", StringComparison.OrdinalIgnoreCase));
 
         var urlCandidates = UrlLauncherValidator.ExtractWebUrls("open https://news.ycombinator.com");
         urlCandidates.Should().NotBeEmpty();
@@ -90,14 +89,23 @@ public class AppLauncherTests
         mockScreenReader.Setup(r => r.ReadElementsAsync(It.IsAny<AppTarget>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<AccessibilityElement>());
 
-        // Step 1: Decision to open settings
-        mockDecisionModel.Setup(d => d.DecideNextActionAsync(It.IsAny<string>(), It.IsAny<AppTarget>(), It.IsAny<IReadOnlyList<AccessibilityElement>>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))
+        // Jev makes every decision: Step 1 = OpenApp, Step 2 = Done
+        mockDecisionModel.SetupSequence(d => d.DecideNextActionAsync(It.IsAny<string>(), It.IsAny<AppTarget>(), It.IsAny<IReadOnlyList<AccessibilityElement>>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new AgentDecision
             {
                 Operation = AgentOperation.OpenApp,
                 TargetId = "settings",
                 Confidence = 0.99
+            })
+            .ReturnsAsync(new AgentDecision
+            {
+                Operation = AgentOperation.Done,
+                Reason = "App is opened and goal achieved",
+                Confidence = 0.99
             });
+
+        mockDecisionModel.Setup(d => d.VerifyCompletionAsync(It.IsAny<string>(), It.IsAny<AppTarget>(), It.IsAny<IReadOnlyList<AccessibilityElement>>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
 
         // Executor returns NewTarget on OpenApp
         mockActionExecutor.Setup(e => e.ExecuteAsync(It.IsAny<AgentDecision>(), It.IsAny<AccessibilityElement?>(), It.IsAny<CancellationToken>()))
@@ -113,17 +121,18 @@ public class AppLauncherTests
         // Act
         var result = await loop.RunAsync("open settings", initialTarget);
 
-        // Assert
+        // Assert: Jev decided OpenApp, then Jev decided Done
         result.Status.Should().Be(AgentRunStatus.Completed);
         mockActionExecutor.Verify(e => e.ExecuteAsync(It.Is<AgentDecision>(d => d.Operation == AgentOperation.OpenApp), null, It.IsAny<CancellationToken>()), Times.Once);
+        mockDecisionModel.Verify(d => d.VerifyCompletionAsync(It.IsAny<string>(), launchedTarget, It.IsAny<IReadOnlyList<AccessibilityElement>>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Theory]
     [InlineData("search for Adele on youtube", "youtube.com", "Adele")]
     [InlineData("search for quantum computing on google", "google.com", "quantum")]
     [InlineData("google current weather", "google.com", "weather")]
-    [InlineData("open youtube", "youtube.com", "")]
-    [InlineData("open github", "github.com", "")]
+    [InlineData("open github.com", "github.com", "")]
+    [InlineData("visit wikipedia.org", "wikipedia.org", "")]
     public void AL06_TryExtractUrlLaunch_SynthesizesWebSearchesAndSites(string goal, string expectedHost, string expectedQueryFragment)
     {
         bool success = _launcher.TryExtractUrlLaunch(goal, out var url);
@@ -140,6 +149,7 @@ public class AppLauncherTests
     [InlineData("switch to discord", "discord")]
     [InlineData("start spotify", "spotify")]
     [InlineData("open vlc", "vlc")]
+    [InlineData("launch blender", "blender")]
     public void AL07_TryExtractAppLaunch_SupportsUniversalApps(string goal, string expectedApp)
     {
         bool success = _launcher.TryExtractAppLaunch(goal, out var appName, out _);

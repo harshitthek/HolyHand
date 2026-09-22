@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net.Http;
 using System.Windows;
 using HolyHand.App.Windows;
@@ -119,8 +120,17 @@ public partial class App : Application
 
         if (target == null || target.WindowHandle == IntPtr.Zero)
         {
-            _logger?.LogWarning("Cannot start agent run: No valid target window.");
-            return;
+            target = WindowCaptureService.CaptureCurrentForegroundWindow()
+                     ?? WindowCaptureService.CaptureWindowByProcessName("explorer")
+                     ?? new Core.Models.AppTarget
+                     {
+                         ProcessId = Process.GetCurrentProcess().Id,
+                         ProcessName = "explorer",
+                         WindowTitle = "Desktop",
+                         WindowHandle = IntPtr.Zero
+                     };
+            _logger?.LogInformation("Using fallback target: '{ProcessName}' (HWND: 0x{Hwnd:X})",
+                target.ProcessName, target.WindowHandle.ToInt64());
         }
 
         _runCts?.Cancel();

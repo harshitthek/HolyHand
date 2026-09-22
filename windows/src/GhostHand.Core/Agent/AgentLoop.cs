@@ -362,12 +362,6 @@ public class AgentLoop
                     currentTarget = result.NewTarget;
                     loopGuard.Reset();
                     NotifyStatus($"Switched target to {currentTarget.ProcessName} (\"{currentTarget.WindowTitle}\")");
-
-                    if (IsSingleOpenIntent(goal))
-                    {
-                        NotifyStatus($"Goal successfully completed: {currentTarget.ProcessName} is open!");
-                        return AgentRunResult.Completed(step, history);
-                    }
                 }
             }
 
@@ -386,12 +380,6 @@ public class AgentLoop
             NotifyStatus($"Error: {ex.Message}");
             return AgentRunResult.Failed(step, history, ex.Message);
         }
-    }
-
-    private static bool IsSingleOpenIntent(string goal)
-    {
-        var trimmed = goal.Trim();
-        return Regex.IsMatch(trimmed, @"^(?:please\s+)?(?:open|launch|start|run)\s+(?:the\s+app\s+)?([a-zA-Z0-9\-_ ]+?)\.?$", RegexOptions.IgnoreCase);
     }
 
     private void NotifyStatus(string message)

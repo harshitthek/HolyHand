@@ -43,7 +43,7 @@ public partial class PromptPopupWindow : Window
         }
         else
         {
-            TargetAppText.Text = "Target: None";
+            TargetAppText.Text = "Target: Windows Desktop";
             ElevatedBadge.Visibility = Visibility.Collapsed;
             StatusText.Text = "Press Enter to submit, Esc to cancel";
             StatusText.Foreground = System.Windows.Media.Brushes.Gray;

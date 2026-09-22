@@ -36,21 +36,6 @@ public static class UrlLauncherValidator
         return true;
     }
 
-    private static readonly Dictionary<string, string> KnownWebsites = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["youtube"] = "https://www.youtube.com",
-        ["google"] = "https://www.google.com",
-        ["github"] = "https://www.github.com",
-        ["reddit"] = "https://www.reddit.com",
-        ["twitter"] = "https://x.com",
-        ["x"] = "https://x.com",
-        ["wikipedia"] = "https://www.wikipedia.org",
-        ["netflix"] = "https://www.netflix.com",
-        ["amazon"] = "https://www.amazon.com",
-        ["gmail"] = "https://mail.google.com",
-        ["linkedin"] = "https://www.linkedin.com"
-    };
-
     public static IReadOnlyList<Uri> ExtractWebUrls(string prompt)
     {
         if (string.IsNullOrWhiteSpace(prompt))
@@ -71,8 +56,20 @@ public static class UrlLauncherValidator
         if (list.Count > 0)
             return list;
 
-        // 2. Synthesize web search intent (e.g. "search for Adele on youtube", "search for X on google")
-        var searchOnMatch = Regex.Match(prompt, @"(?:search|look)\s+for\s+(.+?)\s+(?:on|in)\s+(google|youtube|bing|reddit|wikipedia)", RegexOptions.IgnoreCase);
+        // 2. Generic web domain in prompt (e.g. "open github.com", "go to wikipedia.org", "visit reddit.com")
+        var domainMatch = Regex.Match(prompt, @"(?:open|go\s+to|visit)\s+([a-zA-Z0-9\-_]+\.[a-zA-Z]{2,}(?:/[^\s]*)?)", RegexOptions.IgnoreCase);
+        if (domainMatch.Success)
+        {
+            var rawDomain = domainMatch.Groups[1].Value.Trim();
+            if (IsValidWebUrl($"https://{rawDomain}", out var domainUri) && domainUri != null)
+            {
+                list.Add(domainUri);
+                return list;
+            }
+        }
+
+        // 3. Search intent on any search engine (e.g. "search for Adele on youtube", "search for X on google")
+        var searchOnMatch = Regex.Match(prompt, @"(?:search|look)\s+for\s+(.+?)\s+(?:on|in)\s+([a-zA-Z0-9\-_]+)", RegexOptions.IgnoreCase);
         if (searchOnMatch.Success)
         {
             var query = searchOnMatch.Groups[1].Value.Trim().Trim('"', '\'');
@@ -92,7 +89,7 @@ public static class UrlLauncherValidator
             }
         }
 
-        // 3. Direct engine shortcuts (e.g. "google <query>", "search google for <query>")
+        // 4. Direct search command (e.g. "google <query>" or "search google for <query>")
         var googleMatch = Regex.Match(prompt, @"^(?:please\s+)?(?:google|search\s+google\s+for)\s+(.+)$", RegexOptions.IgnoreCase);
         if (googleMatch.Success)
         {
@@ -116,21 +113,6 @@ public static class UrlLauncherValidator
             {
                 var searchUrl = $"https://www.youtube.com/results?search_query={Uri.EscapeDataString(query)}";
                 if (IsValidWebUrl(searchUrl, out var uri) && uri != null)
-                {
-                    list.Add(uri);
-                    return list;
-                }
-            }
-        }
-
-        // 4. Known website destinations (e.g. "open youtube", "open github")
-        var openSiteMatch = Regex.Match(prompt, @"^(?:please\s+)?(?:open|go\s+to|visit)\s+([a-zA-Z0-9\-_]+)(?:\.com|\.org|\.net)?(?:\s.*)?$", RegexOptions.IgnoreCase);
-        if (openSiteMatch.Success)
-        {
-            var siteKey = openSiteMatch.Groups[1].Value.Trim().ToLowerInvariant();
-            if (KnownWebsites.TryGetValue(siteKey, out var siteUrl))
-            {
-                if (IsValidWebUrl(siteUrl, out var uri) && uri != null)
                 {
                     list.Add(uri);
                     return list;

@@ -15,31 +15,6 @@ public class AppLauncher : IAppLauncher
 {
     private readonly ILogger<AppLauncher> _logger;
 
-    private static readonly Dictionary<string, string> KnownApps = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["settings"] = "ms-settings:",
-        ["windows settings"] = "ms-settings:",
-        ["notepad"] = "notepad.exe",
-        ["text editor"] = "notepad.exe",
-        ["calculator"] = "calc.exe",
-        ["calc"] = "calc.exe",
-        ["explorer"] = "explorer.exe",
-        ["file explorer"] = "explorer.exe",
-        ["files"] = "explorer.exe",
-        ["edge"] = "msedge.exe",
-        ["microsoft edge"] = "msedge.exe",
-        ["browser"] = "msedge.exe",
-        ["chrome"] = "chrome.exe",
-        ["google chrome"] = "chrome.exe",
-        ["terminal"] = "wt.exe",
-        ["windows terminal"] = "wt.exe",
-        ["cmd"] = "cmd.exe",
-        ["command prompt"] = "cmd.exe",
-        ["paint"] = "mspaint.exe",
-        ["task manager"] = "taskmgr.exe",
-        ["spotify"] = "spotify.exe"
-    };
-
     private static readonly HashSet<string> DisallowedExecutables = new(StringComparer.OrdinalIgnoreCase)
     {
         "powershell.exe",
@@ -180,33 +155,32 @@ public class AppLauncher : IAppLauncher
     private static bool ResolveLaunchCommand(string appName, out string launchCommand)
     {
         var trimmed = appName.Trim();
-        var clean = trimmed.ToLowerInvariant();
 
-        // 1. Known predefined apps
-        if (KnownApps.TryGetValue(trimmed, out var command) || KnownApps.TryGetValue(clean, out command))
-        {
-            launchCommand = command;
-            return true;
-        }
-
-        // 2. Windows App Paths registry lookup (registered desktop apps)
+        // 1. Windows App Paths registry lookup (registered desktop apps)
         if (TryFindInAppPathsRegistry(trimmed, out var appPath))
         {
             launchCommand = appPath;
             return true;
         }
 
-        // 3. Windows Start Menu shortcut (.lnk)
+        // 2. Windows Start Menu shortcut (.lnk) (installed programs on user's system)
         if (TryFindStartMenuShortcut(trimmed, out var shortcutPath))
         {
             launchCommand = shortcutPath;
             return true;
         }
 
-        // 4. Known protocol schemes
-        if (clean is "spotify" or "discord" or "slack" or "steam")
+        // 3. URI scheme or protocol (e.g. ms-settings:, calculator:, spotify:)
+        if (trimmed.EndsWith(':') || (trimmed.Contains(':') && !trimmed.Contains('\\') && !trimmed.Contains('/')))
         {
-            launchCommand = $"{clean}:";
+            launchCommand = trimmed;
+            return true;
+        }
+
+        // 4. Native Windows shell executable fallback (system binaries in PATH: notepad, calc, explorer, etc.)
+        if (IsSafeLaunchCommand(trimmed))
+        {
+            launchCommand = trimmed;
             return true;
         }
 
