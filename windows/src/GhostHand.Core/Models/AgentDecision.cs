@@ -4,6 +4,7 @@ public enum AgentOperation
 {
     Click,
     TypeText,
+    TypeAndEnter,
     ClickText,
     ScrollUp,
     ScrollDown,
@@ -13,6 +14,8 @@ public enum AgentOperation
     Wait,
     OpenApp,
     OpenUrl,
+    PressSpace,
+    PressMediaPlay,
     Done,
     Blocked,
     AskUser

@@ -120,7 +120,65 @@ public static class UrlLauncherValidator
             }
         }
 
-        // 5. General search intent (e.g. "open brave and search lion", "search about lion", "search python in chrome")
+        // 5. Chained platform and query search (e.g. "open brave and search for youtube and search honey singh songs")
+        var chainedMatch = Regex.Match(
+            prompt,
+            @"(?:(?:open|launch|start)\s+[a-zA-Z0-9_\- ]+?\s+(?:and|then)\s+)?(?:search|go\s+to|open)\s+(?:for\s+)?([a-zA-Z0-9_\-]+)\s+(?:and|then)\s+(?:search|play|find|look\s+up)\s+(?:for\s+)?(.+?)(?:\.|$)",
+            RegexOptions.IgnoreCase);
+
+        if (chainedMatch.Success)
+        {
+            var platform = chainedMatch.Groups[1].Value.Trim().ToLowerInvariant();
+            var targetQuery = chainedMatch.Groups[2].Value.Trim().Trim('"', '\'');
+
+            if (!string.IsNullOrWhiteSpace(targetQuery) && targetQuery.Length > 1)
+            {
+                var targetUrl = platform switch
+                {
+                    "youtube" => $"https://www.youtube.com/results?search_query={Uri.EscapeDataString(targetQuery)}",
+                    "spotify" => $"https://open.spotify.com/search/{Uri.EscapeDataString(targetQuery)}",
+                    "reddit" => $"https://www.reddit.com/search/?q={Uri.EscapeDataString(targetQuery)}",
+                    "google" => $"https://www.google.com/search?q={Uri.EscapeDataString(targetQuery)}",
+                    "bing" => $"https://www.bing.com/search?q={Uri.EscapeDataString(targetQuery)}",
+                    "wikipedia" => $"https://en.wikipedia.org/wiki/Special:Search?search={Uri.EscapeDataString(targetQuery)}",
+                    _ => $"https://www.google.com/search?q={Uri.EscapeDataString(targetQuery)}"
+                };
+
+                if (IsValidWebUrl(targetUrl, out var uri) && uri != null)
+                {
+                    list.Add(uri);
+                    return list;
+                }
+            }
+        }
+
+        // 6. Music streaming intent (e.g. "open spotify and play any song of aditya rikhari", "play aditya rikhari on spotify")
+        var musicMatch = Regex.Match(
+            prompt,
+            @"(?:(?:open|launch|start)\s+([a-zA-Z0-9_\- ]+?)\s+(?:and|then)\s+)?(?:play|listen\s+to|stream)(?:\s+(?:any\s+song\s+(?:of|by)|songs?\s+(?:of|by)|music\s+(?:of|by)|tracks?\s+(?:of|by)))?\s+(.+?)(?:\s+(?:on|in|using|with)\s+([a-zA-Z0-9_\-]+)|\.|$)",
+            RegexOptions.IgnoreCase);
+
+        if (musicMatch.Success)
+        {
+            var query = musicMatch.Groups[2].Value.Trim().Trim('"', '\'');
+            query = Regex.Replace(query, @"^(?:any\s+song\s+(?:of|by)|songs?\s+(?:of|by)|music\s+(?:of|by)|track\s+(?:of|by))\s+", "", RegexOptions.IgnoreCase).Trim();
+            var platform = (musicMatch.Groups[3].Success ? musicMatch.Groups[3].Value : (musicMatch.Groups[1].Success ? musicMatch.Groups[1].Value : "")).Trim().ToLowerInvariant();
+
+            if (!string.IsNullOrWhiteSpace(query) && query.Length > 1)
+            {
+                var streamUrl = platform.Contains("spotify")
+                    ? $"https://open.spotify.com/search/{Uri.EscapeDataString(query)}"
+                    : $"https://www.youtube.com/results?search_query={Uri.EscapeDataString(query)}";
+
+                if (IsValidWebUrl(streamUrl, out var uri) && uri != null)
+                {
+                    list.Add(uri);
+                    return list;
+                }
+            }
+        }
+
+        // 7. General search intent (e.g. "open brave and search lion", "search about lion", "search python in chrome")
         var generalSearchMatch = Regex.Match(
             prompt,
             @"(?:(?:open|launch|start)\s+[a-zA-Z0-9_\- ]+?\s+(?:and|then)\s+)?(?:search|look\s+up|find|query)(?:\s+(?:for|about|on|regarding|the\s+web\s+for))?\s+(.+?)(?:\s+(?:on|in|using|with)\s+([a-zA-Z0-9\-_]+)|\.|$)",
@@ -136,6 +194,7 @@ public static class UrlLauncherValidator
                 var searchUrl = engineOrApp switch
                 {
                     "youtube" => $"https://www.youtube.com/results?search_query={Uri.EscapeDataString(query)}",
+                    "spotify" => $"https://open.spotify.com/search/{Uri.EscapeDataString(query)}",
                     "bing" => $"https://www.bing.com/search?q={Uri.EscapeDataString(query)}",
                     "reddit" => $"https://www.reddit.com/search/?q={Uri.EscapeDataString(query)}",
                     "wikipedia" => $"https://en.wikipedia.org/wiki/Special:Search?search={Uri.EscapeDataString(query)}",

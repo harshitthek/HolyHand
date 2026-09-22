@@ -193,9 +193,11 @@ public partial class App : Application
                 var loopOptions = new AgentLoopOptions
                 {
                     DryRun = false,
-                    MaxSteps = 15,
-                    MaxConsecutiveStalls = 3
+                    MaxSteps = 100,
+                    MaxConsecutiveStalls = 10
                 };
+
+                var windowTracker = _serviceProvider?.GetService<IWindowCaptureService>() as IWindowTracker;
 
                 var loop = new AgentLoop(
                     screenReader,
@@ -205,11 +207,17 @@ public partial class App : Application
                     NullLogger<AgentLoop>.Instance,
                     riskPolicy,
                     _confirmationDialog,
-                    auditLog);
+                    auditLog,
+                    windowTracker);
 
                 loop.StatusChanged += status =>
                 {
                     _popup?.UpdateStatus(status);
+                };
+
+                loop.TargetChanged += newTarget =>
+                {
+                    _popup?.UpdateTarget(newTarget);
                 };
 
                 var runResult = await loop.RunAsync(goal, target, token);

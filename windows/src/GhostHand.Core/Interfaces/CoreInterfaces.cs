@@ -98,3 +98,8 @@ public interface IAppLauncher
     Task<AppTarget?> LaunchUrlAsync(Uri url, CancellationToken cancellationToken = default);
 }
 
+public interface IWindowTracker
+{
+    AppTarget? GetActiveTarget(AppTarget currentTarget);
+}
+

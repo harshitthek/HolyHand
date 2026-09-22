@@ -55,6 +55,17 @@ public partial class PromptPopupWindow : Window
         PromptInput.Focus();
     }
 
+    public void UpdateTarget(AppTarget target)
+    {
+        _currentTarget = target;
+        Dispatcher.Invoke(() =>
+        {
+            var title = !string.IsNullOrWhiteSpace(target.WindowTitle) ? target.WindowTitle : target.ProcessName;
+            TargetAppText.Text = $"Target: {target.ProcessName} — \"{title}\"";
+            ElevatedBadge.Visibility = target.IsElevated ? Visibility.Visible : Visibility.Collapsed;
+        });
+    }
+
     public void SetExecuting(bool isExecuting, string? status = null)
     {
         Dispatcher.Invoke(() =>

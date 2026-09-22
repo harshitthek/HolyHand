@@ -13,7 +13,7 @@ public class LoopGuard
     public int ConsecutiveStalls => _consecutiveStalls;
     public bool IsStalled => _consecutiveStalls >= _maxConsecutiveStalls;
 
-    public LoopGuard(int maxConsecutiveStalls = 3)
+    public LoopGuard(int maxConsecutiveStalls = 10)
     {
         _maxConsecutiveStalls = maxConsecutiveStalls;
     }

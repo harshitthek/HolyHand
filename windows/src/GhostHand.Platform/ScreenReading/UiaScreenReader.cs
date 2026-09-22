@@ -113,11 +113,11 @@ public class UiaScreenReader : IScreenReader, IDisposable
 
             // 5. Evaluate UIA coverage: fallback to OCR if interactive element count is low
             int interactiveCount = rawElements.Count(e => ElementRanker.IsInteractive(e.Role));
-            if (interactiveCount < _options.OcrFallbackThreshold && _ocrService != null)
+            if ((rawElements.Count == 0 || (_options.OcrFallbackThreshold > 0 && interactiveCount < _options.OcrFallbackThreshold)) && _ocrService != null)
             {
                 _logger.LogInformation(
-                    "Interactive UIA element count ({Count}) is below threshold ({Thresh}). Activating local OCR fallback.",
-                    interactiveCount, _options.OcrFallbackThreshold);
+                    "Interactive UIA element count ({Count}) requires fallback. Activating local OCR.",
+                    interactiveCount);
 
                 try
                 {

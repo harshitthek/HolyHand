@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Drawing;
+using HolyHand.Core.Interfaces;
 using HolyHand.Core.Models;
 using Windows.Win32;
 using Windows.Win32.Foundation;
@@ -11,12 +12,47 @@ public interface IWindowCaptureService
     AppTarget? CaptureForegroundWindow();
 }
 
-public class WindowCaptureService : IWindowCaptureService
+public class WindowCaptureService : IWindowCaptureService, IWindowTracker
 {
     public AppTarget? CaptureForegroundWindow()
     {
         var hwnd = PInvoke.GetForegroundWindow();
         return CaptureWindowByHwnd(hwnd);
+    }
+
+    public AppTarget? GetActiveTarget(AppTarget currentTarget)
+    {
+        var fg = CaptureForegroundWindow();
+        if (fg != null && fg.WindowHandle != IntPtr.Zero)
+        {
+            // If current target is the desktop or shell, auto-switch to active application
+            if (IsDesktopOrShell(currentTarget) && !IsDesktopOrShell(fg))
+            {
+                return fg;
+            }
+
+            // If foreground window belongs to current target process, track its active window handle
+            if (fg.ProcessId == currentTarget.ProcessId && fg.WindowHandle != currentTarget.WindowHandle)
+            {
+                return fg;
+            }
+        }
+        return currentTarget;
+    }
+
+    public static bool IsDesktopOrShell(AppTarget? target)
+    {
+        if (target == null) return true;
+        if (target.ProcessName.Equals("explorer", StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrEmpty(target.WindowTitle) ||
+                target.WindowTitle.Equals("Program Manager", StringComparison.OrdinalIgnoreCase) ||
+                target.WindowTitle.Equals("Desktop", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static unsafe AppTarget? CaptureWindowByHwnd(HWND hwnd)
@@ -103,6 +139,19 @@ public class WindowCaptureService : IWindowCaptureService
         HWND foundHwnd = HWND.Null;
         HWND fallbackHwnd = HWND.Null;
 
+        // Check process MainWindowHandle first
+        try
+        {
+            using var proc = Process.GetProcessById(processId);
+            var mainHwnd = (HWND)proc.MainWindowHandle;
+            if (mainHwnd != HWND.Null && PInvoke.IsWindowVisible(mainHwnd))
+            {
+                var mainTarget = CaptureWindowByHwnd(mainHwnd);
+                if (mainTarget != null) return mainTarget;
+            }
+        }
+        catch { }
+
         PInvoke.EnumWindows((hwnd, _) =>
         {
             uint pid = 0;
@@ -114,7 +163,8 @@ public class WindowCaptureService : IWindowCaptureService
                 {
                     int w = rect.right - rect.left;
                     int h = rect.bottom - rect.top;
-                    if (w > 150 && h > 150)
+                    // Normal window or minimized window (left == -32000)
+                    if ((w > 150 && h > 150) || rect.left <= -30000)
                     {
                         foundHwnd = hwnd;
                         return false;

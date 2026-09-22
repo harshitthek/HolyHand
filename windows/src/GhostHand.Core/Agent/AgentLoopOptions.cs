@@ -2,9 +2,9 @@ namespace HolyHand.Core.Agent;
 
 public record AgentLoopOptions
 {
-    public int MaxSteps { get; init; } = 30;
+    public int MaxSteps { get; init; } = 100;
     public bool DryRun { get; init; } = true;
-    public int MaxConsecutiveStalls { get; init; } = 3;
+    public int MaxConsecutiveStalls { get; init; } = 10;
     public int ActionTimeoutSeconds { get; init; } = 10;
 
     public static AgentLoopOptions FromEnvironment()

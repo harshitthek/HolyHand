@@ -248,6 +248,16 @@ public class JevDecisionModel : IDecisionModel
             {
                 foreach (var textCandidate in textCandidates.Take(3))
                 {
+                    // If element already contains this exact text, avoid looping!
+                    if (!string.IsNullOrEmpty(el.Value) && el.Value.Contains(textCandidate, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    var keyEnter = $"type_and_enter:{el.Id}:{textCandidate}";
+                    var descEnter = $"Type \"{textCandidate}\" into {el.DisplayRole} \"{el.DisplayLabel}\" and press Enter";
+                    choices[keyEnter] = descEnter;
+
                     var key = $"type:{el.Id}:{textCandidate}";
                     var desc = $"Type \"{textCandidate}\" into {el.DisplayRole} \"{el.DisplayLabel}\"";
                     choices[key] = desc;
@@ -257,6 +267,8 @@ public class JevDecisionModel : IDecisionModel
 
         // Standard actions
         choices["press:enter"] = "Press Enter/Return key";
+        choices["press:space"] = "Press Spacebar to play/pause or select";
+        choices["press:media_play"] = "Press Media Play key to toggle playback";
         choices["press:tab"] = "Press Tab key to advance focus";
         choices["press:escape"] = "Press Escape key to dismiss dialog/menu";
         choices["scroll:down"] = "Scroll down to reveal more controls";
@@ -311,6 +323,24 @@ public class JevDecisionModel : IDecisionModel
             };
         }
 
+        if (key.StartsWith("type_and_enter:", StringComparison.OrdinalIgnoreCase))
+        {
+            var parts = key.Split(':', 3);
+            var elementId = parts.Length > 1 ? parts[1] : string.Empty;
+            var text = parts.Length > 2 ? parts[2] : string.Empty;
+            var el = elements.FirstOrDefault(e => e.Id == elementId);
+
+            return new AgentDecision
+            {
+                Operation = AgentOperation.TypeAndEnter,
+                TargetId = elementId,
+                TargetLabel = el?.DisplayLabel,
+                TextValue = text,
+                Confidence = confidence,
+                Reason = $"Type '{text}' into {elementId} and press Enter"
+            };
+        }
+
         if (key.StartsWith("type:", StringComparison.OrdinalIgnoreCase))
         {
             var parts = key.Split(':', 3);
@@ -332,6 +362,8 @@ public class JevDecisionModel : IDecisionModel
         return key.ToLowerInvariant() switch
         {
             "press:enter" => new AgentDecision { Operation = AgentOperation.PressReturn, Confidence = confidence },
+            "press:space" => new AgentDecision { Operation = AgentOperation.PressSpace, Confidence = confidence },
+            "press:media_play" => new AgentDecision { Operation = AgentOperation.PressMediaPlay, Confidence = confidence },
             "press:tab" => new AgentDecision { Operation = AgentOperation.PressTab, Confidence = confidence },
             "press:escape" => new AgentDecision { Operation = AgentOperation.PressEscape, Confidence = confidence },
             "scroll:down" => new AgentDecision { Operation = AgentOperation.ScrollDown, Confidence = confidence },
@@ -391,7 +423,20 @@ public class JevDecisionModel : IDecisionModel
                 candidates.Add(val);
         }
 
-        // 4. Calculations: "calculate/compute <expression>"
+        // 4. Play / Listen / Stream queries: "play/listen to [any song of/by/music by] <text>"
+        var playMatches = Regex.Matches(
+            goal,
+            @"(?:play|listen\s+to|stream)(?:\s+(?:any\s+song\s+(?:of|by)|songs?\s+(?:of|by)|music\s+(?:of|by)|tracks?\s+(?:of|by)))?\s+(?:[""']?)(.+?)(?:[""']?)(?:\s+(?:on|in|using|with)\s+[a-zA-Z0-9_\-]+|\.|$|\band\b)",
+            RegexOptions.IgnoreCase);
+        foreach (Match m in playMatches)
+        {
+            var val = m.Groups[1].Value.Trim();
+            val = Regex.Replace(val, @"^(?:any\s+song\s+(?:of|by)|songs?\s+(?:of|by)|music\s+(?:of|by)|track\s+(?:of|by))\s+", "", RegexOptions.IgnoreCase).Trim();
+            if (!string.IsNullOrEmpty(val))
+                candidates.Add(val);
+        }
+
+        // 5. Calculations: "calculate/compute <expression>"
         var calcMatch = Regex.Match(goal, @"(?:calculate|calc|compute)\s+(.+)$", RegexOptions.IgnoreCase);
         if (calcMatch.Success)
         {
@@ -399,7 +444,7 @@ public class JevDecisionModel : IDecisionModel
             if (!string.IsNullOrEmpty(val)) candidates.Add(val);
         }
 
-        // 5. Fallback: If no candidate extracted yet, see if goal is a direct short phrase
+        // 6. Fallback: If no candidate extracted yet, see if goal is a direct short phrase
         if (candidates.Count == 0 && !goal.StartsWith("click", StringComparison.OrdinalIgnoreCase) && !goal.StartsWith("scroll", StringComparison.OrdinalIgnoreCase))
         {
             var cleaned = Regex.Replace(goal, @"^(?:please\s+|can\s+you\s+|i\s+want\s+to\s+)", "", RegexOptions.IgnoreCase).Trim();

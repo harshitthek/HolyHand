@@ -166,9 +166,39 @@ public class AppLauncherTests
     [InlineData("search about lion", "lion")]
     [InlineData("open chrome and search for weather", "weather")]
     [InlineData("write hello into notepad", "hello")]
+    [InlineData("open spotify and play any song of aditya rikhari", "aditya rikhari")]
+    [InlineData("play aditya rikhari on spotify", "aditya rikhari")]
+    [InlineData("listen to Bohemian Rhapsody", "Bohemian Rhapsody")]
     public void AL08_ExtractCandidatePhrases_ExtractsSearchAndWriteTerms(string goal, string expectedPhrase)
     {
         var candidates = JevDecisionModel.ExtractCandidatePhrases(goal);
         candidates.Should().Contain(expectedPhrase);
+    }
+
+    [Theory]
+    [InlineData("spotify", @"C:\Users\User\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Spotify.lnk", "Spotify")]
+    [InlineData("notepad", @"C:\Windows\System32\notepad.exe", "notepad")]
+    [InlineData("settings", "ms-settings:", "SystemSettings")]
+    [InlineData("calculator", null, "calculator")]
+    public void AL09_GetExpectedProcessName_ResolvesValidProcessName(string appName, string? command, string expectedProc)
+    {
+        var proc = AppLauncher.GetExpectedProcessName(appName, command);
+        proc.Should().BeEquivalentTo(expectedProc);
+    }
+
+    [Fact]
+    public void AL10_ExtractWebUrls_SynthesizesSpotifySearchUrl_ForMusicIntent()
+    {
+        var urls = UrlLauncherValidator.ExtractWebUrls("open spotify and play any song of aditya rikhari");
+        urls.Should().NotBeEmpty();
+        urls.Should().Contain(u => u.Host.Contains("spotify.com") && u.AbsolutePath.Contains("search"));
+    }
+
+    [Fact]
+    public void AL11_ExtractWebUrls_SynthesizesChainedPlatformSearchUrl()
+    {
+        var urls = UrlLauncherValidator.ExtractWebUrls("open brave and search for youtube and search honey singh songs");
+        urls.Should().NotBeEmpty();
+        urls.Should().Contain(u => u.Host.Contains("youtube.com") && u.Query.Contains("honey"));
     }
 }

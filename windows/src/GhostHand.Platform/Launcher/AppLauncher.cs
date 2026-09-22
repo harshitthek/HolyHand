@@ -352,20 +352,24 @@ public class AppLauncher : IAppLauncher
         return true;
     }
 
-    private static string? GetExpectedProcessName(string appName, string command)
+    public static string GetExpectedProcessName(string appName, string? command)
     {
-        if (command.Equals("ms-settings:", StringComparison.OrdinalIgnoreCase) ||
-            appName.Contains("settings", StringComparison.OrdinalIgnoreCase))
+        if (!string.IsNullOrEmpty(command) && (command.Equals("ms-settings:", StringComparison.OrdinalIgnoreCase) ||
+            appName.Contains("settings", StringComparison.OrdinalIgnoreCase)))
         {
             return "SystemSettings";
         }
 
-        if (command.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+        if (!string.IsNullOrEmpty(command))
         {
-            return Path.GetFileNameWithoutExtension(command);
+            var fileName = Path.GetFileNameWithoutExtension(command);
+            if (!string.IsNullOrEmpty(fileName))
+            {
+                return fileName;
+            }
         }
 
-        return null;
+        return appName.Trim();
     }
 
     private async Task<AppTarget?> WaitForNewForegroundTargetAsync(string? expectedProcessName, CancellationToken cancellationToken)
@@ -373,36 +377,43 @@ public class AppLauncher : IAppLauncher
         var sw = Stopwatch.StartNew();
         AppTarget? lastCaptured = null;
 
-        while (sw.ElapsedMilliseconds < 3500)
+        while (sw.ElapsedMilliseconds < 5000)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await Task.Delay(250, cancellationToken);
 
-            var fg = WindowCaptureService.CaptureCurrentForegroundWindow();
-            if (fg != null && fg.WindowHandle != IntPtr.Zero)
+            // 1. Actively check if expected process window already exists and can be focused
+            if (!string.IsNullOrEmpty(expectedProcessName))
             {
-                // Skip taskbar and shell desktop
-                if (fg.ProcessName.Equals("explorer", StringComparison.OrdinalIgnoreCase) &&
-                    (fg.WindowTitle.Equals("Program Manager", StringComparison.OrdinalIgnoreCase) ||
-                     string.IsNullOrEmpty(fg.WindowTitle)))
+                var byProc = WindowCaptureService.CaptureWindowByProcessName(expectedProcessName);
+                if (byProc != null && byProc.WindowHandle != IntPtr.Zero)
                 {
-                    continue;
+                    _logger.LogInformation("Captured launched window by process name: {ProcessName} - '{Title}'", byProc.ProcessName, byProc.WindowTitle);
+                    BringWindowToForeground(byProc);
+                    return byProc;
                 }
+            }
 
+            // 2. Check if foreground window matches or is a valid newly activated window
+            var fg = WindowCaptureService.CaptureCurrentForegroundWindow();
+            if (fg != null && fg.WindowHandle != IntPtr.Zero && !WindowCaptureService.IsDesktopOrShell(fg))
+            {
                 if (!string.IsNullOrEmpty(expectedProcessName))
                 {
                     if (fg.ProcessName.Contains(expectedProcessName, StringComparison.OrdinalIgnoreCase) ||
                         fg.WindowTitle.Contains(expectedProcessName, StringComparison.OrdinalIgnoreCase))
                     {
-                        _logger.LogInformation("Captured newly launched target window: {ProcessName} - '{Title}'", fg.ProcessName, fg.WindowTitle);
+                        _logger.LogInformation("Captured newly launched target window in foreground: {ProcessName} - '{Title}'", fg.ProcessName, fg.WindowTitle);
                         return fg;
                     }
                 }
                 else
                 {
                     lastCaptured = fg;
+                    return fg;
                 }
             }
+
+            await Task.Delay(150, cancellationToken);
         }
 
         if (!string.IsNullOrEmpty(expectedProcessName))
@@ -410,7 +421,8 @@ public class AppLauncher : IAppLauncher
             var byProc = WindowCaptureService.CaptureWindowByProcessName(expectedProcessName);
             if (byProc != null)
             {
-                _logger.LogInformation("Captured launched window by process name: {ProcessName} - '{Title}'", byProc.ProcessName, byProc.WindowTitle);
+                _logger.LogInformation("Captured launched window by process name fallback: {ProcessName} - '{Title}'", byProc.ProcessName, byProc.WindowTitle);
+                BringWindowToForeground(byProc);
                 return byProc;
             }
         }

@@ -85,4 +85,42 @@ public static class InputSimulator
             PInvoke.SendInput(2, pInputs, sizeof(INPUT));
         }
     }
+
+    public static unsafe void SendChord(VIRTUAL_KEY mod, VIRTUAL_KEY key)
+    {
+        var inputs = new INPUT[4];
+
+        // Mod down
+        inputs[0].type = INPUT_TYPE.INPUT_KEYBOARD;
+        inputs[0].Anonymous.ki.wVk = mod;
+
+        // Key down
+        inputs[1].type = INPUT_TYPE.INPUT_KEYBOARD;
+        inputs[1].Anonymous.ki.wVk = key;
+
+        // Key up
+        inputs[2].type = INPUT_TYPE.INPUT_KEYBOARD;
+        inputs[2].Anonymous.ki.wVk = key;
+        inputs[2].Anonymous.ki.dwFlags = KEYBD_EVENT_FLAGS.KEYEVENTF_KEYUP;
+
+        // Mod up
+        inputs[3].type = INPUT_TYPE.INPUT_KEYBOARD;
+        inputs[3].Anonymous.ki.wVk = mod;
+        inputs[3].Anonymous.ki.dwFlags = KEYBD_EVENT_FLAGS.KEYEVENTF_KEYUP;
+
+        fixed (INPUT* pInputs = inputs)
+        {
+            PInvoke.SendInput(4, pInputs, sizeof(INPUT));
+        }
+    }
+
+    public static void SelectAllAndClear()
+    {
+        // Ctrl + A
+        SendChord((VIRTUAL_KEY)0x11, (VIRTUAL_KEY)0x41);
+        Thread.Sleep(30);
+        // Backspace
+        SendKey((VIRTUAL_KEY)0x08);
+        Thread.Sleep(30);
+    }
 }

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Drawing;
 using FlaUI.Core.Definitions;
 using FlaUI.UIA3;
@@ -80,11 +81,31 @@ public class ActionExecutor : IActionExecutor, IDisposable
 
             if (currentPid != (uint)ExpectedProcessId.Value)
             {
-                _logger.LogWarning("Foreground process changed mid-action! Expected PID {Expected}, current PID {Current}. Aborting.",
-                    ExpectedProcessId.Value, currentPid);
+                // If the previous expected PID was explorer (the desktop shell) and the current foreground is an active application, migrate ExpectedProcessId
+                bool wasDesktop = false;
+                try
+                {
+                    using var prevProc = Process.GetProcessById(ExpectedProcessId.Value);
+                    if (prevProc.ProcessName.Equals("explorer", StringComparison.OrdinalIgnoreCase))
+                    {
+                        wasDesktop = true;
+                    }
+                }
+                catch { }
 
-                return ActionResult.FailureResult(
-                    $"Foreground process changed mid-action (expected PID {ExpectedProcessId.Value}, found {currentPid}). Execution aborted.");
+                if (wasDesktop && currentPid != 0)
+                {
+                    _logger.LogInformation("Foreground migrated from desktop shell to app (PID {CurrentPid}). Updating ExpectedProcessId.", currentPid);
+                    ExpectedProcessId = (int)currentPid;
+                }
+                else
+                {
+                    _logger.LogWarning("Foreground process changed mid-action! Expected PID {Expected}, current PID {Current}. Aborting.",
+                        ExpectedProcessId.Value, currentPid);
+
+                    return ActionResult.FailureResult(
+                        $"Foreground process changed mid-action (expected PID {ExpectedProcessId.Value}, found {currentPid}). Execution aborted.");
+                }
             }
         }
 
@@ -125,8 +146,11 @@ public class ActionExecutor : IActionExecutor, IDisposable
                 case AgentOperation.Click:
                     return ExecuteClick(targetElement);
 
+                case AgentOperation.TypeAndEnter:
+                    return ExecuteTypeText(targetElement, decision.TextValue ?? string.Empty, submitWithEnter: true);
+
                 case AgentOperation.TypeText:
-                    return ExecuteTypeText(targetElement, decision.TextValue ?? string.Empty);
+                    return ExecuteTypeText(targetElement, decision.TextValue ?? string.Empty, submitWithEnter: IsSearchOrAddressBar(targetElement));
 
                 case AgentOperation.PressReturn:
                     InputSimulator.SendKey(VIRTUAL_KEY.VK_RETURN);
@@ -139,6 +163,14 @@ public class ActionExecutor : IActionExecutor, IDisposable
                 case AgentOperation.PressEscape:
                     InputSimulator.SendKey(VIRTUAL_KEY.VK_ESCAPE);
                     return ActionResult.SuccessResult("Pressed Escape key");
+
+                case AgentOperation.PressSpace:
+                    InputSimulator.SendKey(VIRTUAL_KEY.VK_SPACE);
+                    return ActionResult.SuccessResult("Pressed Space key");
+
+                case AgentOperation.PressMediaPlay:
+                    InputSimulator.SendKey((VIRTUAL_KEY)0xB3); // VK_MEDIA_PLAY_PAUSE
+                    return ActionResult.SuccessResult("Pressed Media Play/Pause key");
 
                 case AgentOperation.ScrollDown:
                     InputSimulator.Scroll(down: true);
@@ -221,12 +253,18 @@ public class ActionExecutor : IActionExecutor, IDisposable
         return ActionResult.SuccessResult($"Clicked via SendInput fallback at ({center.X}, {center.Y})");
     }
 
-    private ActionResult ExecuteTypeText(AccessibilityElement? targetElement, string text)
+    private ActionResult ExecuteTypeText(AccessibilityElement? targetElement, string text, bool submitWithEnter = false)
     {
         if (targetElement == null)
         {
             // Type into currently focused control
+            InputSimulator.SelectAllAndClear();
             InputSimulator.TypeText(text);
+            if (submitWithEnter)
+            {
+                Thread.Sleep(60);
+                InputSimulator.SendKey(VIRTUAL_KEY.VK_RETURN);
+            }
             return ActionResult.SuccessResult($"Typed text into focused element");
         }
 
@@ -246,6 +284,14 @@ public class ActionExecutor : IActionExecutor, IDisposable
                 {
                     current.Patterns.Value.Pattern.SetValue(text);
                     _logger.LogDebug("Typed '{Text}' via UIA ValuePattern on {Label}", text, targetElement.DisplayLabel);
+
+                    if (submitWithEnter || IsSearchOrAddressBar(targetElement))
+                    {
+                        Thread.Sleep(80);
+                        InputSimulator.SendKey(VIRTUAL_KEY.VK_RETURN);
+                        return ActionResult.SuccessResult($"Typed '{text}' and submitted via Enter on '{targetElement.DisplayLabel}'");
+                    }
+
                     return ActionResult.SuccessResult($"Typed text via ValuePattern on '{targetElement.DisplayLabel}'");
                 }
 
@@ -265,11 +311,31 @@ public class ActionExecutor : IActionExecutor, IDisposable
             _logger.LogDebug(ex, "UIA ValuePattern typing failed; falling back to click-and-type.");
         }
 
-        // Fallback: Click to focus, then SendInput text
+        // Fallback: Click to focus, Select All and clear, then SendInput text
         InputSimulator.Click(center.X, center.Y);
-        Thread.Sleep(50);
+        Thread.Sleep(60);
+        InputSimulator.SelectAllAndClear();
+        Thread.Sleep(30);
         InputSimulator.TypeText(text);
+
+        if (submitWithEnter || IsSearchOrAddressBar(targetElement))
+        {
+            Thread.Sleep(80);
+            InputSimulator.SendKey(VIRTUAL_KEY.VK_RETURN);
+            _logger.LogDebug("Auto-pressed Enter after typing into search/address bar '{Label}'", targetElement.DisplayLabel);
+            return ActionResult.SuccessResult($"Typed '{text}' and submitted via Enter on '{targetElement.DisplayLabel}'");
+        }
+
         return ActionResult.SuccessResult($"Typed text via SendInput fallback on '{targetElement.DisplayLabel}'");
+    }
+
+    private static bool IsSearchOrAddressBar(AccessibilityElement? el)
+    {
+        if (el == null) return false;
+        var label = (el.DisplayLabel ?? string.Empty).ToLowerInvariant();
+        return label.Contains("address") || label.Contains("search") || label.Contains("omnibox") ||
+               label.Contains("url") || label.Contains("find") || label.Contains("google") ||
+               label.Contains("query") || label.Contains("bar");
     }
 
     private static uint GetForegroundProcessId()

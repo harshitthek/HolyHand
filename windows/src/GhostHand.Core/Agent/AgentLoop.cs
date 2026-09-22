@@ -82,9 +82,11 @@ public class AgentLoop
     private readonly IRiskPolicy _riskPolicy;
     private readonly IConfirmationPrompt? _confirmationPrompt;
     private readonly IAuditLog? _auditLog;
+    private readonly IWindowTracker? _windowTracker;
 
     public event Action<string>? StatusChanged;
     public event Action<int, AgentDecision, ActionResult>? StepCompleted;
+    public event Action<AppTarget>? TargetChanged;
 
     public AgentLoop(
         IScreenReader screenReader,
@@ -94,7 +96,8 @@ public class AgentLoop
         ILogger<AgentLoop> logger,
         IRiskPolicy? riskPolicy = null,
         IConfirmationPrompt? confirmationPrompt = null,
-        IAuditLog? auditLog = null)
+        IAuditLog? auditLog = null,
+        IWindowTracker? windowTracker = null)
     {
         _screenReader = screenReader;
         _decisionModel = decisionModel;
@@ -104,6 +107,7 @@ public class AgentLoop
         _riskPolicy = riskPolicy ?? new RiskPolicy();
         _confirmationPrompt = confirmationPrompt;
         _auditLog = auditLog;
+        _windowTracker = windowTracker;
     }
 
     public async Task<AgentRunResult> RunAsync(
@@ -169,6 +173,20 @@ public class AgentLoop
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 step++;
+
+                // 0. Auto-sync target window if tracking service indicates active foreground app changed
+                if (_windowTracker != null)
+                {
+                    var trackedTarget = _windowTracker.GetActiveTarget(currentTarget);
+                    if (trackedTarget != null && (trackedTarget.WindowHandle != currentTarget.WindowHandle || trackedTarget.ProcessId != currentTarget.ProcessId))
+                    {
+                        _logger.LogInformation("Active target auto-switched to {Process} ('{Title}')", trackedTarget.ProcessName, trackedTarget.WindowTitle);
+                        currentTarget = trackedTarget;
+                        loopGuard.Reset();
+                        TargetChanged?.Invoke(currentTarget);
+                        NotifyStatus($"Target active: {currentTarget.ProcessName} (\"{currentTarget.WindowTitle}\")");
+                    }
+                }
 
                 // 1. Observe screen elements
                 NotifyStatus($"Step {step}/{_options.MaxSteps}: Reading screen...");
@@ -240,8 +258,10 @@ public class AgentLoop
                 // 8. Safety Invariants: Deterministic Risk Policy + Jev Risk Escalation
                 bool requiresConfirmation = _riskPolicy.RequiresConfirmation(decision, targetElement, currentTarget, out var riskReason);
 
-                // Jev Call B: If deterministic code policy deemed it safe, ask Jev for risk escalation
-                if (!requiresConfirmation && decision.Operation is not (AgentOperation.Done or AgentOperation.AskUser or AgentOperation.Wait))
+                // Jev Call B: If deterministic code policy deemed it safe, ask Jev for risk escalation.
+                // Performance Optimization: Only invoke Jev Call B for Click actions where external/destructive actions are possible.
+                // Navigation, typing, keypresses, scrolling, and app launches are harmless navigation and do not need a 2-second AI call.
+                if (!requiresConfirmation && decision.Operation == AgentOperation.Click)
                 {
                     try
                     {
@@ -361,6 +381,7 @@ public class AgentLoop
                         currentTarget.ProcessName, result.NewTarget.ProcessName);
                     currentTarget = result.NewTarget;
                     loopGuard.Reset();
+                    TargetChanged?.Invoke(currentTarget);
                     NotifyStatus($"Switched target to {currentTarget.ProcessName} (\"{currentTarget.WindowTitle}\")");
                 }
             }
