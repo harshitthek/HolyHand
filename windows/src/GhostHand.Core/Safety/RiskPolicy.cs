@@ -10,6 +10,7 @@ public class RiskPolicy : IRiskPolicy
     private readonly RiskPolicyOptions _options;
     private readonly ILogger<RiskPolicy> _logger;
     private readonly Regex _sensitiveVerbRegex;
+    private readonly Regex _prohibitedRegex;
 
     public RiskPolicy(RiskPolicyOptions? options = null, ILogger<RiskPolicy>? logger = null)
     {
@@ -20,6 +21,12 @@ public class RiskPolicy : IRiskPolicy
         var patterns = _options.SensitiveVerbs.Select(Regex.Escape);
         _sensitiveVerbRegex = new Regex(
             $@"\b({string.Join("|", patterns)})\b",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        // Build word-boundary regex from configured prohibited deletion terms
+        var prohibitedPatterns = _options.ProhibitedTerms.Select(Regex.Escape);
+        _prohibitedRegex = new Regex(
+            $@"\b({string.Join("|", prohibitedPatterns)})\b",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
     }
 
@@ -80,9 +87,17 @@ public class RiskPolicy : IRiskPolicy
             if (!string.IsNullOrWhiteSpace(target.Role)) textToInspect.Add(target.Role);
         }
 
-        // Check for sensitive verb matches in target text
+        // Check for prohibited or sensitive verb matches in target text
         foreach (var text in textToInspect)
         {
+            var prohibitedMatch = _prohibitedRegex.Match(text);
+            if (prohibitedMatch.Success)
+            {
+                reason = $"Action '{decision.Operation}' on '{target?.DisplayLabel ?? decision.TargetLabel}' matches prohibited verb '{prohibitedMatch.Value}'.";
+                _logger.LogInformation("Confirmation required: {Reason}", reason);
+                return true;
+            }
+
             var match = _sensitiveVerbRegex.Match(text);
             if (match.Success)
             {
@@ -110,11 +125,69 @@ public class RiskPolicy : IRiskPolicy
         // 5. Typing sensitive credentials or tokens
         if (decision.Operation == AgentOperation.TypeText && !string.IsNullOrEmpty(decision.TextValue))
         {
+            var prohibitedMatch = _prohibitedRegex.Match(decision.TextValue);
+            if (prohibitedMatch.Success)
+            {
+                reason = $"Typed text contains prohibited verb '{prohibitedMatch.Value}'.";
+                _logger.LogInformation("Confirmation required: {Reason}", reason);
+                return true;
+            }
+
             var textMatch = _sensitiveVerbRegex.Match(decision.TextValue);
             if (textMatch.Success)
             {
                 reason = $"Typed text contains sensitive verb '{textMatch.Value}'.";
                 _logger.LogInformation("Confirmation required: {Reason}", reason);
+                return true;
+            }
+        }
+
+        reason = string.Empty;
+        return false;
+    }
+
+    public bool IsGoalProhibited(string goal, out string reason)
+    {
+        if (string.IsNullOrWhiteSpace(goal))
+        {
+            reason = string.Empty;
+            return false;
+        }
+
+        var match = _prohibitedRegex.Match(goal);
+        if (match.Success)
+        {
+            reason = $"⛔ Prohibited by safety policy: Deletion tasks (matching '{match.Value}') are strictly prohibited.";
+            _logger.LogWarning("Goal prohibited by policy: {Reason}", reason);
+            return true;
+        }
+
+        reason = string.Empty;
+        return false;
+    }
+
+    public bool IsActionProhibited(AgentDecision decision, AccessibilityElement? target, string goal, out string reason)
+    {
+        var textToInspect = new List<string>(5);
+        if (!string.IsNullOrWhiteSpace(decision.TargetLabel)) textToInspect.Add(decision.TargetLabel);
+        if (target != null)
+        {
+            if (!string.IsNullOrWhiteSpace(target.Label)) textToInspect.Add(target.Label);
+            if (!string.IsNullOrWhiteSpace(target.Value)) textToInspect.Add(target.Value);
+            if (!string.IsNullOrWhiteSpace(target.Role)) textToInspect.Add(target.Role);
+        }
+        if (decision.Operation == AgentOperation.TypeText && !string.IsNullOrWhiteSpace(decision.TextValue))
+        {
+            textToInspect.Add(decision.TextValue);
+        }
+
+        foreach (var text in textToInspect)
+        {
+            var match = _prohibitedRegex.Match(text);
+            if (match.Success)
+            {
+                reason = $"⛔ Prohibited by safety policy: Action '{decision.Operation}' on '{target?.DisplayLabel ?? decision.TargetLabel}' matches prohibited deletion term '{match.Value}'.";
+                _logger.LogWarning("Action prohibited by policy: {Reason}", reason);
                 return true;
             }
         }

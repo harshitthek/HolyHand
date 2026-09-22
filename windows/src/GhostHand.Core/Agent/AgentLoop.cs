@@ -119,7 +119,29 @@ public class AgentLoop
         _logger.LogInformation("Starting AgentLoop for goal '{Goal}' on target '{Target}' (DryRun: {DryRun})",
             goal, currentTarget.ProcessName, _options.DryRun);
 
-        // Security check: verify if target process is deny-listed
+        // Security check 1: verify if goal is strictly prohibited (e.g. deletion tasks)
+        if (_riskPolicy.IsGoalProhibited(goal, out var goalProhibitedReason))
+        {
+            _logger.LogWarning("Goal prohibited by policy: {Reason}", goalProhibitedReason);
+            NotifyStatus(goalProhibitedReason);
+
+            if (_auditLog != null)
+            {
+                await _auditLog.LogAsync(new AuditLogEntry
+                {
+                    Goal = goal,
+                    Operation = AgentOperation.AskUser,
+                    AppProcess = currentTarget.ProcessName,
+                    AppTitle = currentTarget.WindowTitle,
+                    DecisionType = "prohibited",
+                    Reason = goalProhibitedReason
+                }, CancellationToken.None);
+            }
+
+            return AgentRunResult.Failed(0, history, goalProhibitedReason);
+        }
+
+        // Security check 2: verify if target process is deny-listed
         if (_riskPolicy.IsAppDenied(currentTarget, out var denyReason))
         {
             _logger.LogWarning("App deny-list triggered: {Reason}", denyReason);
@@ -190,7 +212,32 @@ public class AgentLoop
                     ? elements.FirstOrDefault(e => e.Id == decision.TargetId)
                     : null;
 
-                // 7. Safety Invariants: Deterministic Risk Policy + Jev Risk Escalation
+                // 7. Safety Invariant: Check if action is strictly prohibited (e.g. deletion operations/buttons)
+                if (_riskPolicy.IsActionProhibited(decision, targetElement, goal, out var actionProhibitedReason))
+                {
+                    _logger.LogWarning("Action prohibited by safety policy: {Reason}", actionProhibitedReason);
+                    NotifyStatus(actionProhibitedReason);
+
+                    if (_auditLog != null)
+                    {
+                        await _auditLog.LogAsync(new AuditLogEntry
+                        {
+                            Goal = goal,
+                            Operation = decision.Operation,
+                            TargetId = decision.TargetId,
+                            TargetLabel = targetElement?.DisplayLabel ?? decision.TargetLabel,
+                            TargetRole = targetElement?.DisplayRole,
+                            AppProcess = currentTarget.ProcessName,
+                            AppTitle = currentTarget.WindowTitle,
+                            DecisionType = "prohibited",
+                            Reason = actionProhibitedReason
+                        }, cancellationToken);
+                    }
+
+                    return AgentRunResult.Failed(step, history, actionProhibitedReason);
+                }
+
+                // 8. Safety Invariants: Deterministic Risk Policy + Jev Risk Escalation
                 bool requiresConfirmation = _riskPolicy.RequiresConfirmation(decision, targetElement, currentTarget, out var riskReason);
 
                 // Jev Call B: If deterministic code policy deemed it safe, ask Jev for risk escalation

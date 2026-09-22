@@ -5,6 +5,9 @@ using HolyHand.Core.Jev;
 using HolyHand.Core.Models;
 using HolyHand.Platform.Windowing;
 using Microsoft.Extensions.Logging;
+using Windows.Win32;
+using Windows.Win32.Foundation;
+using Windows.Win32.UI.WindowsAndMessaging;
 
 namespace HolyHand.Platform.Launcher;
 
@@ -109,6 +112,16 @@ public class AppLauncher : IAppLauncher
             }
         }
 
+        // Check if application is already running with an open window -> focus it!
+        var runningTarget = FindRunningAppTarget(appName, command);
+        if (runningTarget != null && runningTarget.WindowHandle != IntPtr.Zero)
+        {
+            _logger.LogInformation("Application '{AppName}' is already running ({ProcessName}). Bringing window to foreground.",
+                appName, runningTarget.ProcessName);
+            BringWindowToForeground(runningTarget);
+            return runningTarget;
+        }
+
         if (!IsSafeLaunchCommand(command))
         {
             _logger.LogWarning("Refusing to launch command '{Command}': safety violation.", command);
@@ -166,22 +179,183 @@ public class AppLauncher : IAppLauncher
 
     private static bool ResolveLaunchCommand(string appName, out string launchCommand)
     {
-        if (KnownApps.TryGetValue(appName.Trim(), out var command))
+        var trimmed = appName.Trim();
+        var clean = trimmed.ToLowerInvariant();
+
+        // 1. Known predefined apps
+        if (KnownApps.TryGetValue(trimmed, out var command) || KnownApps.TryGetValue(clean, out command))
         {
             launchCommand = command;
             return true;
         }
 
-        // Also check with punctuation stripped
-        var clean = appName.Trim().ToLowerInvariant();
-        if (KnownApps.TryGetValue(clean, out command))
+        // 2. Windows App Paths registry lookup (registered desktop apps)
+        if (TryFindInAppPathsRegistry(trimmed, out var appPath))
         {
-            launchCommand = command;
+            launchCommand = appPath;
+            return true;
+        }
+
+        // 3. Windows Start Menu shortcut (.lnk)
+        if (TryFindStartMenuShortcut(trimmed, out var shortcutPath))
+        {
+            launchCommand = shortcutPath;
+            return true;
+        }
+
+        // 4. Known protocol schemes
+        if (clean is "spotify" or "discord" or "slack" or "steam")
+        {
+            launchCommand = $"{clean}:";
             return true;
         }
 
         launchCommand = string.Empty;
         return false;
+    }
+
+    private static bool TryFindInAppPathsRegistry(string appName, out string path)
+    {
+        path = string.Empty;
+        var exeName = appName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? appName : appName + ".exe";
+
+        string[] baseKeys = [
+            @"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths",
+            @"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths"
+        ];
+
+        foreach (var baseKey in baseKeys)
+        {
+            try
+            {
+                using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey($@"{baseKey}\{exeName}");
+                var val = key?.GetValue(null)?.ToString();
+                if (!string.IsNullOrEmpty(val))
+                {
+                    val = val.Trim('"', ' ');
+                    if (File.Exists(val))
+                    {
+                        path = val;
+                        return true;
+                    }
+                }
+            }
+            catch { }
+
+            try
+            {
+                using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey($@"{baseKey}\{exeName}");
+                var val = key?.GetValue(null)?.ToString();
+                if (!string.IsNullOrEmpty(val))
+                {
+                    val = val.Trim('"', ' ');
+                    if (File.Exists(val))
+                    {
+                        path = val;
+                        return true;
+                    }
+                }
+            }
+            catch { }
+        }
+
+        return false;
+    }
+
+    private static bool TryFindStartMenuShortcut(string appName, out string shortcutPath)
+    {
+        shortcutPath = string.Empty;
+        var searchToken = appName.Trim().ToLowerInvariant();
+
+        var directories = new List<string>();
+        var commonStart = Environment.GetFolderPath(Environment.SpecialFolder.CommonStartMenu);
+        if (!string.IsNullOrEmpty(commonStart) && Directory.Exists(commonStart))
+            directories.Add(commonStart);
+
+        var userStart = Environment.GetFolderPath(Environment.SpecialFolder.StartMenu);
+        if (!string.IsNullOrEmpty(userStart) && Directory.Exists(userStart))
+            directories.Add(userStart);
+
+        foreach (var dir in directories)
+        {
+            try
+            {
+                var lnkFiles = Directory.EnumerateFiles(dir, "*.lnk", SearchOption.AllDirectories);
+                // Exact match first
+                foreach (var file in lnkFiles)
+                {
+                    var nameWithoutExt = Path.GetFileNameWithoutExtension(file);
+                    if (nameWithoutExt.Equals(searchToken, StringComparison.OrdinalIgnoreCase))
+                    {
+                        shortcutPath = file;
+                        return true;
+                    }
+                }
+
+                // Substring match
+                foreach (var file in lnkFiles)
+                {
+                    var nameWithoutExt = Path.GetFileNameWithoutExtension(file);
+                    if (nameWithoutExt.Contains(searchToken, StringComparison.OrdinalIgnoreCase))
+                    {
+                        shortcutPath = file;
+                        return true;
+                    }
+                }
+            }
+            catch { }
+        }
+
+        return false;
+    }
+
+    private static AppTarget? FindRunningAppTarget(string appName, string? command)
+    {
+        var expectedName = !string.IsNullOrEmpty(command) ? GetExpectedProcessName(appName, command) : appName;
+        if (string.IsNullOrEmpty(expectedName)) expectedName = appName;
+
+        // 1. Direct match by process name
+        var target = WindowCaptureService.CaptureWindowByProcessName(expectedName);
+        if (target != null && target.WindowHandle != IntPtr.Zero)
+            return target;
+
+        // 2. Search processes by process name or main window title
+        try
+        {
+            var processes = Process.GetProcesses();
+            foreach (var proc in processes)
+            {
+                using (proc)
+                {
+                    try
+                    {
+                        if (proc.ProcessName.Contains(expectedName, StringComparison.OrdinalIgnoreCase) ||
+                            (!string.IsNullOrEmpty(proc.MainWindowTitle) && proc.MainWindowTitle.Contains(expectedName, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            var captured = WindowCaptureService.CaptureWindowByProcessId(proc.Id);
+                            if (captured != null && captured.WindowHandle != IntPtr.Zero)
+                                return captured;
+                        }
+                    }
+                    catch { }
+                }
+            }
+        }
+        catch { }
+
+        return null;
+    }
+
+    private static void BringWindowToForeground(AppTarget target)
+    {
+        if (target.WindowHandle == IntPtr.Zero) return;
+        try
+        {
+            var hwnd = (HWND)target.WindowHandle;
+            PInvoke.ShowWindow(hwnd, SHOW_WINDOW_CMD.SW_RESTORE);
+            PInvoke.SetForegroundWindow(hwnd);
+        }
+        catch { }
     }
 
     private static bool IsSafeLaunchCommand(string command)

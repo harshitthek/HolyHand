@@ -52,6 +52,8 @@ public interface IRiskPolicy
 {
     bool IsAppDenied(AppTarget appTarget, out string reason);
     bool RequiresConfirmation(AgentDecision decision, AccessibilityElement? target, AppTarget appTarget, out string reason);
+    bool IsGoalProhibited(string goal, out string reason);
+    bool IsActionProhibited(AgentDecision decision, AccessibilityElement? target, string goal, out string reason);
 }
 
 public interface IConfirmationPrompt

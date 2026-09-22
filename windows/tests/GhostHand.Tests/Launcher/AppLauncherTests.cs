@@ -117,4 +117,34 @@ public class AppLauncherTests
         result.Status.Should().Be(AgentRunStatus.Completed);
         mockActionExecutor.Verify(e => e.ExecuteAsync(It.Is<AgentDecision>(d => d.Operation == AgentOperation.OpenApp), null, It.IsAny<CancellationToken>()), Times.Once);
     }
+
+    [Theory]
+    [InlineData("search for Adele on youtube", "youtube.com", "Adele")]
+    [InlineData("search for quantum computing on google", "google.com", "quantum")]
+    [InlineData("google current weather", "google.com", "weather")]
+    [InlineData("open youtube", "youtube.com", "")]
+    [InlineData("open github", "github.com", "")]
+    public void AL06_TryExtractUrlLaunch_SynthesizesWebSearchesAndSites(string goal, string expectedHost, string expectedQueryFragment)
+    {
+        bool success = _launcher.TryExtractUrlLaunch(goal, out var url);
+
+        success.Should().BeTrue();
+        url.Host.Should().Contain(expectedHost);
+        if (!string.IsNullOrEmpty(expectedQueryFragment))
+        {
+            url.Query.Should().Contain(expectedQueryFragment);
+        }
+    }
+
+    [Theory]
+    [InlineData("switch to discord", "discord")]
+    [InlineData("start spotify", "spotify")]
+    [InlineData("open vlc", "vlc")]
+    public void AL07_TryExtractAppLaunch_SupportsUniversalApps(string goal, string expectedApp)
+    {
+        bool success = _launcher.TryExtractAppLaunch(goal, out var appName, out _);
+
+        success.Should().BeTrue();
+        appName.ToLowerInvariant().Should().Be(expectedApp.ToLowerInvariant());
+    }
 }

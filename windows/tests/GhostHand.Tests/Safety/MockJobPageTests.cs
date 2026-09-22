@@ -132,6 +132,11 @@ public class MockJobPageTests
         // It must NOT bypass confirmation!
         requiresConfirmation.Should().BeTrue();
         reason.Should().Contain("delete");
+
+        // Strict deletion invariant: It is also strictly prohibited from execution
+        bool isProhibited = riskPolicy.IsActionProhibited(decision, maliciousButton, "submit job application", out var prohibitedReason);
+        isProhibited.Should().BeTrue();
+        prohibitedReason.Should().Contain("delete");
     }
 
     [Fact]

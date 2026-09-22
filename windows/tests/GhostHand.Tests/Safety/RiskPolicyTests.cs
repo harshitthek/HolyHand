@@ -31,15 +31,12 @@ public class RiskPolicyTests
     [InlineData("Buy License")]
     [InlineData("Purchase Ticket")]
     [InlineData("Order Food")]
-    [InlineData("Delete Database")]
-    [InlineData("Remove User")]
     [InlineData("Post Update")]
     [InlineData("Publish Article")]
     [InlineData("Confirm Transaction")]
     [InlineData("Sign in to Account")]
     [InlineData("Install Package")]
     [InlineData("Run Executable")]
-    [InlineData("Uninstall Driver")]
     [InlineData("Transfer Funds")]
     public void RS01_TableDriven_SensitiveVerbs_RequireConfirmation(string label)
     {
@@ -99,15 +96,15 @@ public class RiskPolicyTests
     [Fact]
     public async Task RS02_ModelRisk_CanEscalate_NeverDowngrade()
     {
-        // Case 1: Code policy flags sensitive verb "Delete Account".
+        // Case 1: Code policy flags sensitive verb "Submit Application".
         // Even if decision model returned Harmless, code policy insists on confirmation.
         var sensitiveDecision = new AgentDecision
         {
             Operation = AgentOperation.Click,
             TargetId = "e1",
-            TargetLabel = "Delete Account"
+            TargetLabel = "Submit Application"
         };
-        var sensitiveElement = new AccessibilityElement { Id = "e1", Role = "Button", Label = "Delete Account" };
+        var sensitiveElement = new AccessibilityElement { Id = "e1", Role = "Button", Label = "Submit Application" };
 
         bool codeRequired = _policy.RequiresConfirmation(sensitiveDecision, sensitiveElement, _sampleApp, out _);
         codeRequired.Should().BeTrue(); // Invariant 1: Plain code risk decisions first
@@ -174,9 +171,9 @@ public class RiskPolicyTests
         {
             Operation = AgentOperation.Click,
             TargetId = "e1",
-            TargetLabel = "Delete Records"
+            TargetLabel = "Transfer Funds"
         };
-        var sensitiveEl = new AccessibilityElement { Id = "e1", Role = "Button", Label = "Delete Records" };
+        var sensitiveEl = new AccessibilityElement { Id = "e1", Role = "Button", Label = "Transfer Funds" };
 
         var mockReader = new Mock<IScreenReader>();
         mockReader
@@ -319,6 +316,155 @@ public class RiskPolicyTests
         // Audit entry recorded with "denied"
         mockAuditLog.Verify(a => a.LogAsync(
             It.Is<AuditLogEntry>(e => e.DecisionType == "denied" && e.AppProcess == processName),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Theory]
+    [InlineData("delete all temp files")]
+    [InlineData("please remove the document")]
+    [InlineData("erase all user data")]
+    [InlineData("wipe hard disk")]
+    [InlineData("empty the trash")]
+    [InlineData("destroy current session")]
+    [InlineData("uninstall python")]
+    [InlineData("del secret.txt")]
+    [InlineData("format c:")]
+    public void RS10_DeletionGoals_AreStrictlyProhibited(string goal)
+    {
+        bool prohibited = _policy.IsGoalProhibited(goal, out var reason);
+
+        prohibited.Should().BeTrue();
+        reason.Should().Contain("Prohibited by safety policy");
+        reason.Should().Contain("prohibited");
+    }
+
+    [Theory]
+    [InlineData("open spotify")]
+    [InlineData("search for Adele on youtube")]
+    [InlineData("write hello world in notepad")]
+    [InlineData("launch calculator")]
+    [InlineData("open google chrome")]
+    public void RS10_BenignGoals_AreNotProhibited(string goal)
+    {
+        bool prohibited = _policy.IsGoalProhibited(goal, out var reason);
+
+        prohibited.Should().BeFalse();
+        reason.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("Delete")]
+    [InlineData("Delete Account")]
+    [InlineData("Remove User")]
+    [InlineData("Erase All")]
+    [InlineData("Wipe Disk")]
+    [InlineData("Trash Item")]
+    [InlineData("Uninstall App")]
+    public void RS11_DeletionActions_AreStrictlyProhibited(string label)
+    {
+        var decision = new AgentDecision
+        {
+            Operation = AgentOperation.Click,
+            TargetId = "e_del",
+            TargetLabel = label
+        };
+
+        var element = new AccessibilityElement
+        {
+            Id = "e_del",
+            Role = "Button",
+            Label = label,
+            Enabled = true
+        };
+
+        bool prohibited = _policy.IsActionProhibited(decision, element, "clean up", out var reason);
+
+        prohibited.Should().BeTrue();
+        reason.Should().Contain("Prohibited by safety policy");
+        reason.Should().Contain(decision.Operation.ToString());
+    }
+
+    [Fact]
+    public async Task RS12_AgentLoop_AbortsImmediately_OnProhibitedGoal()
+    {
+        var mockReader = new Mock<IScreenReader>();
+        var mockDecisionModel = new Mock<IDecisionModel>();
+        var mockExecutor = new Mock<IActionExecutor>();
+        var mockPrompt = new Mock<IConfirmationPrompt>();
+        var mockAuditLog = new Mock<IAuditLog>();
+
+        var loop = new AgentLoop(
+            mockReader.Object,
+            mockDecisionModel.Object,
+            mockExecutor.Object,
+            new AgentLoopOptions { MaxSteps = 5 },
+            NullLogger<AgentLoop>.Instance,
+            _policy,
+            mockPrompt.Object,
+            mockAuditLog.Object);
+
+        var result = await loop.RunAsync("delete my files in notepad", _sampleApp);
+
+        // Result is failed, 0 steps, zero executions, zero prompts
+        result.Status.Should().Be(AgentRunStatus.Failed);
+        result.StepsCompleted.Should().Be(0);
+        result.Message.Should().Contain("Prohibited by safety policy");
+
+        mockReader.Verify(r => r.ReadElementsAsync(It.IsAny<AppTarget>(), It.IsAny<CancellationToken>()), Times.Never);
+        mockExecutor.Verify(e => e.ExecuteAsync(It.IsAny<AgentDecision>(), It.IsAny<AccessibilityElement>(), It.IsAny<CancellationToken>()), Times.Never);
+        mockPrompt.Verify(p => p.RequestConfirmationAsync(It.IsAny<AgentDecision>(), It.IsAny<AccessibilityElement>(), It.IsAny<AppTarget>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+
+        mockAuditLog.Verify(a => a.LogAsync(
+            It.Is<AuditLogEntry>(e => e.DecisionType == "prohibited" && e.Goal.Contains("delete")),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task RS13_AgentLoop_AbortsImmediately_OnProhibitedAction()
+    {
+        var prohibitedDecision = new AgentDecision
+        {
+            Operation = AgentOperation.Click,
+            TargetId = "del_btn",
+            TargetLabel = "Delete Records"
+        };
+        var prohibitedEl = new AccessibilityElement { Id = "del_btn", Role = "Button", Label = "Delete Records" };
+
+        var mockReader = new Mock<IScreenReader>();
+        mockReader
+            .Setup(r => r.ReadElementsAsync(It.IsAny<AppTarget>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<AccessibilityElement> { prohibitedEl });
+
+        var mockDecisionModel = new Mock<IDecisionModel>();
+        mockDecisionModel
+            .Setup(m => m.DecideNextActionAsync(It.IsAny<string>(), It.IsAny<AppTarget>(), It.IsAny<IReadOnlyList<AccessibilityElement>>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(prohibitedDecision);
+
+        var mockExecutor = new Mock<IActionExecutor>();
+        var mockPrompt = new Mock<IConfirmationPrompt>();
+        var mockAuditLog = new Mock<IAuditLog>();
+
+        var loop = new AgentLoop(
+            mockReader.Object,
+            mockDecisionModel.Object,
+            mockExecutor.Object,
+            new AgentLoopOptions { MaxSteps = 5 },
+            NullLogger<AgentLoop>.Instance,
+            _policy,
+            mockPrompt.Object,
+            mockAuditLog.Object);
+
+        var result = await loop.RunAsync("organize documents", _sampleApp);
+
+        // Result is failed, execution stopped, confirmation prompt bypassed
+        result.Status.Should().Be(AgentRunStatus.Failed);
+        result.Message.Should().Contain("Prohibited by safety policy");
+
+        mockExecutor.Verify(e => e.ExecuteAsync(It.IsAny<AgentDecision>(), It.IsAny<AccessibilityElement>(), It.IsAny<CancellationToken>()), Times.Never);
+        mockPrompt.Verify(p => p.RequestConfirmationAsync(It.IsAny<AgentDecision>(), It.IsAny<AccessibilityElement>(), It.IsAny<AppTarget>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+
+        mockAuditLog.Verify(a => a.LogAsync(
+            It.Is<AuditLogEntry>(e => e.DecisionType == "prohibited" && e.Operation == AgentOperation.Click),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 }

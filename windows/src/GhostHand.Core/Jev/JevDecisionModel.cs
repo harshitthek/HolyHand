@@ -424,11 +424,11 @@ public class JevDecisionModel : IDecisionModel
         var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (string.IsNullOrWhiteSpace(goal)) return candidates.ToList();
 
-        // 1. Explicit launch/open verbs:
-        // e.g. "open settings", "launch notepad", "start calculator and calculate 5+5", "open google chrome"
+        // 1. Explicit launch/open/switch verbs:
+        // e.g. "open settings", "launch notepad", "start calculator and calculate 5+5", "switch to discord", "go to chrome"
         var match = Regex.Match(
             goal,
-            @"^(?:please\s+)?(?:open|launch|start|run)\s+(?:the\s+app\s+)?([a-zA-Z0-9\-_ ]+?)(?:\s+(?:and|to|then|in|with)\b|$|\.)",
+            @"^(?:please\s+)?(?:open|launch|start|run|switch\s+to|go\s+to|focus)\s+(?:the\s+app\s+)?([a-zA-Z0-9\-_ ]+?)(?:\s+(?:and|to|then|in|with)\b|$|\.)",
             RegexOptions.IgnoreCase);
 
         if (match.Success)
@@ -438,14 +438,17 @@ public class JevDecisionModel : IDecisionModel
                 !string.Equals(app, "tab", StringComparison.OrdinalIgnoreCase) &&
                 !string.Equals(app, "link", StringComparison.OrdinalIgnoreCase) &&
                 !string.Equals(app, "window", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(app, "dialog", StringComparison.OrdinalIgnoreCase))
+                !string.Equals(app, "dialog", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(app, "document", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(app, "file", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(app, "page", StringComparison.OrdinalIgnoreCase))
             {
                 candidates.Add(app);
             }
         }
 
         // 2. Also check if any known popular app name is mentioned in the goal
-        string[] commonApps = ["settings", "notepad", "calculator", "chrome", "edge", "explorer", "paint", "terminal", "spotify", "task manager"];
+        string[] commonApps = ["settings", "notepad", "calculator", "chrome", "edge", "explorer", "paint", "terminal", "spotify", "task manager", "discord", "slack", "steam", "vlc", "code", "word", "excel", "powerpoint"];
         foreach (var app in commonApps)
         {
             if (Regex.IsMatch(goal, $@"\b{Regex.Escape(app)}\b", RegexOptions.IgnoreCase))

@@ -11,8 +11,6 @@ public class RiskPolicyOptions
         "buy",
         "purchase",
         "order",
-        "delete",
-        "remove",
         "post",
         "publish",
         "confirm",
@@ -22,8 +20,24 @@ public class RiskPolicyOptions
         "login",
         "install",
         "run",
-        "uninstall",
         "transfer"
+    };
+
+    public static readonly IReadOnlySet<string> DefaultProhibitedTerms = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "delete",
+        "deletion",
+        "remove",
+        "erase",
+        "trash",
+        "wipe",
+        "destroy",
+        "drop",
+        "truncate",
+        "uninstall",
+        "del",
+        "unlink",
+        "format"
     };
 
     public static readonly IReadOnlySet<string> DefaultDenyListedProcesses = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -39,6 +53,8 @@ public class RiskPolicyOptions
     };
 
     public HashSet<string> SensitiveVerbs { get; set; } = new(DefaultSensitiveVerbs, StringComparer.OrdinalIgnoreCase);
+
+    public HashSet<string> ProhibitedTerms { get; set; } = new(DefaultProhibitedTerms, StringComparer.OrdinalIgnoreCase);
 
     public HashSet<string> DenyListedProcesses { get; set; } = new(DefaultDenyListedProcesses, StringComparer.OrdinalIgnoreCase);
 
