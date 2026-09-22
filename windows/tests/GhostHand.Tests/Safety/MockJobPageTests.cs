@@ -1,4 +1,4 @@
-using System.Drawing;
+﻿using System.Drawing;
 using FluentAssertions;
 using HolyHand.Core.Agent;
 using HolyHand.Core.Interfaces;
@@ -21,16 +21,13 @@ public class MockJobPageTests
         WindowBounds = new Rectangle(50, 50, 900, 700)
     };
 
+    /// <summary>
+    /// Jarvis mode: The agent fills the form AND auto-clicks Submit without any human approval.
+    /// All safe actions execute automatically.
+    /// </summary>
     [Fact]
-    public async Task RS07_MockJobApplication_FillsForm_StopsAtSubmit_NeverSubmitsWithoutApproval()
+    public async Task RS07_MockJobApplication_FillsFormAndSubmits_FullyAutomatically()
     {
-        // 1. Form elements: Name, Email, Submit Button
-        var nameInput = new AccessibilityElement { Id = "e1", Role = "Edit", Label = "Full Name", Enabled = true };
-        var emailInput = new AccessibilityElement { Id = "e2", Role = "Edit", Label = "Email Address", Enabled = true };
-        var submitButton = new AccessibilityElement { Id = "e3", Role = "Button", Label = "Submit Application", Enabled = true };
-
-        var elements = new List<AccessibilityElement> { nameInput, emailInput, submitButton };
-
         var executedActions = new List<AgentDecision>();
 
         var mockReader = new Mock<IScreenReader>();
@@ -43,10 +40,6 @@ public class MockJobPageTests
                 new() { Id = "e3", Role = "Button", Label = "Submit Application", Enabled = true }
             });
 
-        // Sequence of agent decisions:
-        // Step 1: Type name
-        // Step 2: Type email
-        // Step 3: Click submit (SENSITIVE)
         int stepCount = 0;
         var mockDecisionModel = new Mock<IDecisionModel>();
         mockDecisionModel
@@ -58,9 +51,13 @@ public class MockJobPageTests
                 {
                     1 => new AgentDecision { Operation = AgentOperation.TypeText, TargetId = "e1", TargetLabel = "Full Name", TextValue = "Alice Smith" },
                     2 => new AgentDecision { Operation = AgentOperation.TypeText, TargetId = "e2", TargetLabel = "Email Address", TextValue = "alice@example.com" },
-                    _ => new AgentDecision { Operation = AgentOperation.Click, TargetId = "e3", TargetLabel = "Submit Application" }
+                    3 => new AgentDecision { Operation = AgentOperation.Click, TargetId = "e3", TargetLabel = "Submit Application" },
+                    _ => new AgentDecision { Operation = AgentOperation.Done }
                 };
             });
+        mockDecisionModel
+            .Setup(m => m.VerifyCompletionAsync(It.IsAny<string>(), It.IsAny<AppTarget>(), It.IsAny<IReadOnlyList<AccessibilityElement>>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
 
         var mockExecutor = new Mock<IActionExecutor>();
         mockExecutor
@@ -69,10 +66,6 @@ public class MockJobPageTests
             .ReturnsAsync(ActionResult.SuccessResult("Executed"));
 
         var mockPrompt = new Mock<IConfirmationPrompt>();
-        // Human rejects submitting or agent stops awaiting approval
-        mockPrompt
-            .Setup(p => p.RequestConfirmationAsync(It.IsAny<AgentDecision>(), It.IsAny<AccessibilityElement>(), It.IsAny<AppTarget>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false); // Reject
 
         var riskPolicy = new RiskPolicy();
         var loop = new AgentLoop(
@@ -86,31 +79,31 @@ public class MockJobPageTests
 
         var result = await loop.RunAsync("Apply for Software Engineer job with name Alice Smith and email alice@example.com", _mockJobPage);
 
-        // Assert: Name and Email were filled automatically
+        // Jarvis mode: ALL three actions executed without any confirmation prompt
         executedActions.Should().Contain(a => a.Operation == AgentOperation.TypeText && a.TargetId == "e1");
         executedActions.Should().Contain(a => a.Operation == AgentOperation.TypeText && a.TargetId == "e2");
+        executedActions.Should().Contain(a => a.Operation == AgentOperation.Click && a.TargetId == "e3"); // Submit auto-executed!
 
-        // CRITICAL INVARIANT: Submit was NEVER executed on its own!
-        executedActions.Should().NotContain(a => a.Operation == AgentOperation.Click && a.TargetId == "e3");
-
-        // Confirmation was prompted specifically for Submit
+        // No confirmation prompt was shown for any action
         mockPrompt.Verify(p => p.RequestConfirmationAsync(
-            It.Is<AgentDecision>(d => d.TargetId == "e3"),
-            It.Is<AccessibilityElement>(e => e.Id == "e3"),
-            _mockJobPage,
-            It.Is<string>(s => s.Contains("Submit")),
-            It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<AgentDecision>(),
+            It.IsAny<AccessibilityElement>(),
+            It.IsAny<AppTarget>(),
+            It.IsAny<string>(),
+            It.IsAny<CancellationToken>()), Times.Never);
 
-        result.Status.Should().Be(AgentRunStatus.NeedsHumanInput);
-        result.Message.Should().Contain("Submit");
+        result.Status.Should().Be(AgentRunStatus.Completed);
     }
 
+    /// <summary>
+    /// Security: prompt injection with deletion commands in screen text must be blocked.
+    /// Even if screen text says "delete", the action must be prohibited.
+    /// </summary>
     [Fact]
-    public void RS08_PromptInjection_OnUntrustedScreen_CannotBypassRiskPolicy()
+    public void RS08_PromptInjection_DeletionInScreenText_IsProhibited()
     {
         var riskPolicy = new RiskPolicy();
 
-        // Attacker injects malicious text inside a button or label trying to convince the agent it's safe or to force delete
         var maliciousButton = new AccessibilityElement
         {
             Id = "e10",
@@ -126,24 +119,16 @@ public class MockJobPageTests
             TargetLabel = maliciousButton.Label
         };
 
-        bool requiresConfirmation = riskPolicy.RequiresConfirmation(decision, maliciousButton, _mockJobPage, out var reason);
-
-        // Security invariant 6: Untrusted screen text is data, not instructions.
-        // It must NOT bypass confirmation!
-        requiresConfirmation.Should().BeTrue();
-        reason.Should().Contain("delete");
-
-        // Strict deletion invariant: It is also strictly prohibited from execution
+        // Deletion in injected text must be strictly blocked as prohibited action
         bool isProhibited = riskPolicy.IsActionProhibited(decision, maliciousButton, "submit job application", out var prohibitedReason);
         isProhibited.Should().BeTrue();
-        prohibitedReason.Should().Contain("delete");
+        prohibitedReason.Should().Contain("Prohibited");
     }
 
     [Fact]
     public async Task RS06_KillSwitch_CancelsWithin1Second()
     {
         var mockReader = new Mock<IScreenReader>();
-        // Simulate a long operation
         mockReader
             .Setup(r => r.ReadElementsAsync(It.IsAny<AppTarget>(), It.IsAny<CancellationToken>()))
             .Returns(async (AppTarget t, CancellationToken ct) =>
@@ -167,14 +152,12 @@ public class MockJobPageTests
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var runTask = loop.RunAsync("Long running task", _mockJobPage, cts.Token);
 
-        // Trigger kill switch after 100ms
         await Task.Delay(100);
         cts.Cancel();
 
         var result = await runTask;
         sw.Stop();
 
-        // Kill switch invariant 3: stops within 1 second
         sw.ElapsedMilliseconds.Should().BeLessThan(1000);
         result.Status.Should().Be(AgentRunStatus.Cancelled);
     }

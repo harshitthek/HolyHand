@@ -1,45 +1,27 @@
-namespace HolyHand.Core.Safety;
+﻿namespace HolyHand.Core.Safety;
 
 public class RiskPolicyOptions
 {
+    // SensitiveVerbs: empty — Jarvis mode requires no confirmation dialogs for any safe action
     public static readonly IReadOnlySet<string> DefaultSensitiveVerbs = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        "submit",
-        "apply",
-        "send",
-        "pay",
-        "buy",
-        "purchase",
-        "order",
-        "post",
-        "publish",
-        "confirm",
-        "sign in",
-        "signin",
-        "log in",
-        "login",
-        "install",
-        "run",
-        "transfer"
+        // Intentionally empty: zero friction for any safe action
     };
 
+    // ProhibitedTerms: ONLY actual deletion operations — strictly enforced
     public static readonly IReadOnlySet<string> DefaultProhibitedTerms = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         "delete",
         "deletion",
-        "remove",
         "erase",
-        "trash",
         "wipe",
         "destroy",
-        "drop",
         "truncate",
-        "uninstall",
-        "del",
-        "unlink",
-        "format"
+        "format",
+        "del"  // command-line deletion shorthand
     };
 
+    // DenyListedProcesses: password managers that should never be automated
     public static readonly IReadOnlySet<string> DefaultDenyListedProcesses = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         "1password",
@@ -60,5 +42,6 @@ public class RiskPolicyOptions
 
     public ActionRiskScore EscalateOnRiskScore { get; set; } = ActionRiskScore.IrreversibleOrExternalEffect;
 
-    public bool RequireConfirmationOnSensitiveText { get; set; } = true;
+    // Disabled: no confirmation prompts for any safe action
+    public bool RequireConfirmationOnSensitiveText { get; set; } = false;
 }
