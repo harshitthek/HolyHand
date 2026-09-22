@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using HolyHand.Core.Agent;
 using HolyHand.Core.Interfaces;
 using HolyHand.Core.Models;
 using HolyHand.Core.Safety;
@@ -226,6 +227,19 @@ public class JevDecisionModel : IDecisionModel
     {
         var choices = new Dictionary<string, string>();
 
+        // 0. App Launch & URL candidates
+        var appCandidates = ExtractAppLaunchCandidates(goal);
+        foreach (var app in appCandidates)
+        {
+            choices[$"open_app:{app}"] = $"Launch or switch to application \"{app}\"";
+        }
+
+        var urlCandidates = UrlLauncherValidator.ExtractWebUrls(goal);
+        foreach (var url in urlCandidates)
+        {
+            choices[$"open_url:{url}"] = $"Open web URL \"{url}\" in browser";
+        }
+
         // Extract search/literal candidate phrases from user goal
         var textCandidates = ExtractCandidatePhrases(goal);
 
@@ -268,6 +282,33 @@ public class JevDecisionModel : IDecisionModel
 
     private static AgentDecision ParseActionDecision(string key, double confidence, IReadOnlyList<AccessibilityElement> elements)
     {
+        if (key.StartsWith("open_app:", StringComparison.OrdinalIgnoreCase))
+        {
+            var appName = key[9..].Trim();
+            return new AgentDecision
+            {
+                Operation = AgentOperation.OpenApp,
+                TargetId = appName,
+                TargetLabel = appName,
+                Confidence = confidence,
+                Reason = $"Launch application '{appName}'"
+            };
+        }
+
+        if (key.StartsWith("open_url:", StringComparison.OrdinalIgnoreCase))
+        {
+            var url = key[9..].Trim();
+            return new AgentDecision
+            {
+                Operation = AgentOperation.OpenUrl,
+                TargetId = url,
+                TargetLabel = url,
+                TextValue = url,
+                Confidence = confidence,
+                Reason = $"Open web URL '{url}'"
+            };
+        }
+
         if (key.StartsWith("click:", StringComparison.OrdinalIgnoreCase))
         {
             var elementId = key[6..];
@@ -372,6 +413,44 @@ public class JevDecisionModel : IDecisionModel
             if (cleaned.Length > 0 && cleaned.Length <= 40)
             {
                 candidates.Add(cleaned);
+            }
+        }
+
+        return candidates.ToList();
+    }
+
+    public static List<string> ExtractAppLaunchCandidates(string goal)
+    {
+        var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(goal)) return candidates.ToList();
+
+        // 1. Explicit launch/open verbs:
+        // e.g. "open settings", "launch notepad", "start calculator and calculate 5+5", "open google chrome"
+        var match = Regex.Match(
+            goal,
+            @"^(?:please\s+)?(?:open|launch|start|run)\s+(?:the\s+app\s+)?([a-zA-Z0-9\-_ ]+?)(?:\s+(?:and|to|then|in|with)\b|$|\.)",
+            RegexOptions.IgnoreCase);
+
+        if (match.Success)
+        {
+            var app = match.Groups[1].Value.Trim();
+            if (!string.Equals(app, "menu", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(app, "tab", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(app, "link", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(app, "window", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(app, "dialog", StringComparison.OrdinalIgnoreCase))
+            {
+                candidates.Add(app);
+            }
+        }
+
+        // 2. Also check if any known popular app name is mentioned in the goal
+        string[] commonApps = ["settings", "notepad", "calculator", "chrome", "edge", "explorer", "paint", "terminal", "spotify", "task manager"];
+        foreach (var app in commonApps)
+        {
+            if (Regex.IsMatch(goal, $@"\b{Regex.Escape(app)}\b", RegexOptions.IgnoreCase))
+            {
+                candidates.Add(app);
             }
         }
 

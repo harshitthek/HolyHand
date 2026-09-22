@@ -138,7 +138,17 @@ public record EvaluateResponse
 
         if (element.TryGetProperty("score", out var scoreProp))
         {
-            score = scoreProp.GetInt32();
+            if (scoreProp.ValueKind == JsonValueKind.Number)
+            {
+                if (scoreProp.TryGetInt32(out var s))
+                    score = s;
+                else if (scoreProp.TryGetDouble(out var d))
+                    score = (int)Math.Round(d);
+            }
+            else if (scoreProp.ValueKind == JsonValueKind.String && int.TryParse(scoreProp.GetString(), out var s))
+            {
+                score = s;
+            }
         }
 
         if (element.TryGetProperty("probabilities", out var probsProp) && probsProp.ValueKind == JsonValueKind.Array)

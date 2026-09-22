@@ -86,3 +86,12 @@ public interface IClock
     DateTimeOffset UtcNow { get; }
     Task DelayAsync(TimeSpan duration, CancellationToken cancellationToken = default);
 }
+
+public interface IAppLauncher
+{
+    bool TryExtractAppLaunch(string goal, out string appName, out string launchCommand);
+    bool TryExtractUrlLaunch(string goal, out Uri url);
+    Task<AppTarget?> LaunchAppAsync(string appName, string? launchCommand = null, CancellationToken cancellationToken = default);
+    Task<AppTarget?> LaunchUrlAsync(Uri url, CancellationToken cancellationToken = default);
+}
+

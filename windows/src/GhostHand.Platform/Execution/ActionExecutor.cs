@@ -14,16 +14,18 @@ public class ActionExecutor : IActionExecutor, IDisposable
 {
     private readonly ILogger<ActionExecutor> _logger;
     private readonly UIA3Automation _automation;
+    private readonly IAppLauncher? _appLauncher;
     private bool _disposed;
 
     public bool DryRun { get; set; } = true;
     public int? ExpectedProcessId { get; set; }
     public IntPtr? TargetWindowHandle { get; set; }
 
-    public ActionExecutor(ILogger<ActionExecutor> logger, bool dryRun = true)
+    public ActionExecutor(ILogger<ActionExecutor> logger, bool dryRun = true, IAppLauncher? appLauncher = null)
     {
         _logger = logger;
         DryRun = dryRun;
+        _appLauncher = appLauncher;
         _automation = new UIA3Automation();
     }
 
@@ -69,7 +71,10 @@ public class ActionExecutor : IActionExecutor, IDisposable
         }
 
         // Live execution mode: verify foreground process matches expected target (UIPI / safety check)
-        if (ExpectedProcessId.HasValue)
+        // Exempt OpenApp and OpenUrl as they deliberately launch new processes
+        if (ExpectedProcessId.HasValue &&
+            decision.Operation != AgentOperation.OpenApp &&
+            decision.Operation != AgentOperation.OpenUrl)
         {
             uint currentPid = GetForegroundProcessId();
 
@@ -87,6 +92,36 @@ public class ActionExecutor : IActionExecutor, IDisposable
         {
             switch (decision.Operation)
             {
+                case AgentOperation.OpenApp:
+                    if (_appLauncher == null)
+                        return ActionResult.FailureResult("AppLauncher is not configured.");
+                    var targetApp = decision.TargetId ?? decision.TargetLabel ?? string.Empty;
+                    var newAppTarget = await _appLauncher.LaunchAppAsync(targetApp, cancellationToken: cancellationToken);
+                    if (newAppTarget != null)
+                    {
+                        ExpectedProcessId = newAppTarget.ProcessId;
+                        TargetWindowHandle = newAppTarget.WindowHandle;
+                        return ActionResult.TargetChanged(newAppTarget, $"Launched application '{newAppTarget.ProcessName}'");
+                    }
+                    return ActionResult.SuccessResult($"Launched application '{targetApp}'");
+
+                case AgentOperation.OpenUrl:
+                    if (_appLauncher == null)
+                        return ActionResult.FailureResult("AppLauncher is not configured.");
+                    var urlString = decision.TextValue ?? decision.TargetId ?? string.Empty;
+                    if (Uri.TryCreate(urlString, UriKind.Absolute, out var uri))
+                    {
+                        var browserTarget = await _appLauncher.LaunchUrlAsync(uri, cancellationToken);
+                        if (browserTarget != null)
+                        {
+                            ExpectedProcessId = browserTarget.ProcessId;
+                            TargetWindowHandle = browserTarget.WindowHandle;
+                            return ActionResult.TargetChanged(browserTarget, $"Opened URL '{uri}'");
+                        }
+                        return ActionResult.SuccessResult($"Opened URL '{uri}'");
+                    }
+                    return ActionResult.FailureResult($"Invalid URL '{urlString}'");
+
                 case AgentOperation.Click:
                     return ExecuteClick(targetElement);
 

@@ -6,6 +6,7 @@ using HolyHand.Core.Models;
 using HolyHand.Core.Safety;
 using HolyHand.Core.ScreenReading;
 using HolyHand.Platform.Execution;
+using HolyHand.Platform.Launcher;
 using HolyHand.Platform.Safety;
 using HolyHand.Platform.ScreenReading;
 using HolyHand.Platform.Windowing;
@@ -362,7 +363,8 @@ public static class Program
 
         var ocrService = new WindowsOcrService(ocrLogger);
         using var screenReader = new UiaScreenReader(ScreenReaderOptions.Default, ocrService, readerLogger);
-        using var actionExecutor = new ActionExecutor(execLogger, dryRun: !isLive);
+        var appLauncher = new AppLauncher();
+        using var actionExecutor = new ActionExecutor(execLogger, dryRun: !isLive, appLauncher: appLauncher);
 
         var loopOptions = new AgentLoopOptions
         {

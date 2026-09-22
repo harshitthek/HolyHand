@@ -11,6 +11,8 @@ public enum AgentOperation
     PressTab,
     PressEscape,
     Wait,
+    OpenApp,
+    OpenUrl,
     Done,
     Blocked,
     AskUser

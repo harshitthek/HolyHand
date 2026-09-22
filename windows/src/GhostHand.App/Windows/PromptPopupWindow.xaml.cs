@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Input;
+using HolyHand.Core.Interfaces;
 using HolyHand.Core.Models;
 
 namespace HolyHand.App.Windows;
@@ -9,6 +10,10 @@ public partial class PromptPopupWindow : Window
     private AppTarget? _currentTarget;
     public event Action<string, AppTarget?>? TaskSubmitted;
     public event Action? Cancelled;
+
+    public ISpeechInput? SpeechInput { get; set; }
+    private CancellationTokenSource? _speechCts;
+    private bool _isListening;
 
     public PromptPopupWindow()
     {
@@ -93,6 +98,7 @@ public partial class PromptPopupWindow : Window
 
     public void HidePopup()
     {
+        _speechCts?.Cancel();
         SetExecuting(false);
         Hide();
         Cancelled?.Invoke();
@@ -100,6 +106,7 @@ public partial class PromptPopupWindow : Window
 
     private void Submit()
     {
+        _speechCts?.Cancel();
         var goal = PromptInput.Text.Trim();
         if (string.IsNullOrWhiteSpace(goal))
         {
@@ -137,9 +144,59 @@ public partial class PromptPopupWindow : Window
         HidePopup();
     }
 
-    private void MicButton_Click(object sender, RoutedEventArgs e)
+    private async void MicButton_Click(object sender, RoutedEventArgs e)
     {
-        StatusText.Text = "Voice input is scheduled for Milestone M7.";
+        if (_isListening)
+        {
+            _speechCts?.Cancel();
+            return;
+        }
+
+        if (SpeechInput == null)
+        {
+            StatusText.Text = "Voice input is not available.";
+            return;
+        }
+
+        _isListening = true;
+        _speechCts?.Dispose();
+        _speechCts = new CancellationTokenSource();
+        var token = _speechCts.Token;
+
+        MicButton.Content = "🔴 Stop";
+        StatusText.Text = "🎙️ Listening... Speak your goal";
+        StatusText.Foreground = System.Windows.Media.Brushes.LightSkyBlue;
+
+        try
+        {
+            var transcript = await SpeechInput.TranscribeAsync(token);
+            if (!string.IsNullOrWhiteSpace(transcript))
+            {
+                PromptInput.Text = transcript;
+                StatusText.Text = $"Recognized: \"{transcript}\"";
+                Submit();
+            }
+            else
+            {
+                StatusText.Text = "No speech detected. Speak clearly or type your goal.";
+                StatusText.Foreground = System.Windows.Media.Brushes.Gray;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            StatusText.Text = "Voice input cancelled.";
+            StatusText.Foreground = System.Windows.Media.Brushes.Gray;
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = "⚠️ " + ex.Message;
+            StatusText.Foreground = System.Windows.Media.Brushes.OrangeRed;
+        }
+        finally
+        {
+            _isListening = false;
+            MicButton.Content = "🎙️ Mic";
+        }
     }
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)

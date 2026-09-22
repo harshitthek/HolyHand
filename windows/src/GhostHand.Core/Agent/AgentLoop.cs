@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using HolyHand.Core.Interfaces;
 using HolyHand.Core.Models;
 using HolyHand.Core.Safety;
@@ -110,15 +111,16 @@ public class AgentLoop
         AppTarget target,
         CancellationToken cancellationToken = default)
     {
+        var currentTarget = target;
         var history = new List<string>();
         var loopGuard = new LoopGuard(_options.MaxConsecutiveStalls);
         int step = 0;
 
         _logger.LogInformation("Starting AgentLoop for goal '{Goal}' on target '{Target}' (DryRun: {DryRun})",
-            goal, target.ProcessName, _options.DryRun);
+            goal, currentTarget.ProcessName, _options.DryRun);
 
         // Security check: verify if target process is deny-listed
-        if (_riskPolicy.IsAppDenied(target, out var denyReason))
+        if (_riskPolicy.IsAppDenied(currentTarget, out var denyReason))
         {
             _logger.LogWarning("App deny-list triggered: {Reason}", denyReason);
             NotifyStatus($"Security policy refusal: {denyReason}");
@@ -129,8 +131,8 @@ public class AgentLoop
                 {
                     Goal = goal,
                     Operation = AgentOperation.AskUser,
-                    AppProcess = target.ProcessName,
-                    AppTitle = target.WindowTitle,
+                    AppProcess = currentTarget.ProcessName,
+                    AppTitle = currentTarget.WindowTitle,
                     DecisionType = "denied",
                     Reason = denyReason
                 }, CancellationToken.None);
@@ -148,7 +150,7 @@ public class AgentLoop
 
                 // 1. Observe screen elements
                 NotifyStatus($"Step {step}/{_options.MaxSteps}: Reading screen...");
-                var elements = await _screenReader.ReadElementsAsync(target, cancellationToken);
+                var elements = await _screenReader.ReadElementsAsync(currentTarget, cancellationToken);
 
                 // 2. Loop guard stall check
                 if (loopGuard.RecordObservation(elements))
@@ -160,13 +162,13 @@ public class AgentLoop
 
                 // 3. Jev Call A: Next action & Goal completion check
                 NotifyStatus($"Step {step}/{_options.MaxSteps}: Choosing next action...");
-                var decision = await _decisionModel.DecideNextActionAsync(goal, target, elements, history, cancellationToken);
+                var decision = await _decisionModel.DecideNextActionAsync(goal, currentTarget, elements, history, cancellationToken);
 
                 // 4. Check if decision is Done
                 if (decision.Operation == AgentOperation.Done)
                 {
                     NotifyStatus("Verifying goal completion...");
-                    var verified = await _decisionModel.VerifyCompletionAsync(goal, target, elements, history, cancellationToken);
+                    var verified = await _decisionModel.VerifyCompletionAsync(goal, currentTarget, elements, history, cancellationToken);
                     if (verified)
                     {
                         NotifyStatus("Goal successfully completed!");
@@ -189,14 +191,14 @@ public class AgentLoop
                     : null;
 
                 // 7. Safety Invariants: Deterministic Risk Policy + Jev Risk Escalation
-                bool requiresConfirmation = _riskPolicy.RequiresConfirmation(decision, targetElement, target, out var riskReason);
+                bool requiresConfirmation = _riskPolicy.RequiresConfirmation(decision, targetElement, currentTarget, out var riskReason);
 
                 // Jev Call B: If deterministic code policy deemed it safe, ask Jev for risk escalation
                 if (!requiresConfirmation && decision.Operation is not (AgentOperation.Done or AgentOperation.AskUser or AgentOperation.Wait))
                 {
                     try
                     {
-                        var riskScore = await _decisionModel.EvaluateActionRiskAsync(goal, target, decision, targetElement, cancellationToken);
+                        var riskScore = await _decisionModel.EvaluateActionRiskAsync(goal, currentTarget, decision, targetElement, cancellationToken);
                         if (riskScore == ActionRiskScore.IrreversibleOrExternalEffect)
                         {
                             requiresConfirmation = true;
@@ -220,7 +222,7 @@ public class AgentLoop
                         approved = await _confirmationPrompt.RequestConfirmationAsync(
                             decision,
                             targetElement,
-                            target,
+                            currentTarget,
                             riskReason,
                             cancellationToken);
                     }
@@ -239,8 +241,8 @@ public class AgentLoop
                                 TargetId = decision.TargetId,
                                 TargetLabel = targetElement?.DisplayLabel ?? decision.TargetLabel,
                                 TargetRole = targetElement?.DisplayRole,
-                                AppProcess = target.ProcessName,
-                                AppTitle = target.WindowTitle,
+                                AppProcess = currentTarget.ProcessName,
+                                AppTitle = currentTarget.WindowTitle,
                                 DecisionType = "rejected",
                                 Reason = riskReason
                             }, cancellationToken);
@@ -260,8 +262,8 @@ public class AgentLoop
                             TargetId = decision.TargetId,
                             TargetLabel = targetElement?.DisplayLabel ?? decision.TargetLabel,
                             TargetRole = targetElement?.DisplayRole,
-                            AppProcess = target.ProcessName,
-                            AppTitle = target.WindowTitle,
+                            AppProcess = currentTarget.ProcessName,
+                            AppTitle = currentTarget.WindowTitle,
                             DecisionType = "confirmed",
                             Reason = riskReason
                         }, cancellationToken);
@@ -279,8 +281,8 @@ public class AgentLoop
                             TargetId = decision.TargetId,
                             TargetLabel = targetElement?.DisplayLabel ?? decision.TargetLabel,
                             TargetRole = targetElement?.DisplayRole,
-                            AppProcess = target.ProcessName,
-                            AppTitle = target.WindowTitle,
+                            AppProcess = currentTarget.ProcessName,
+                            AppTitle = currentTarget.WindowTitle,
                             DecisionType = "auto",
                             Reason = "Harmless action allowed by safety policy."
                         }, cancellationToken);
@@ -304,6 +306,22 @@ public class AgentLoop
                     _logger.LogWarning("Action execution failed at step {Step}: {Error}", step, err);
                     return AgentRunResult.Failed(step, history, err);
                 }
+
+                // Dynamic Target Transition upon launching app/URL
+                if (result.NewTarget != null)
+                {
+                    _logger.LogInformation("Target switched from '{OldTarget}' to '{NewTarget}'",
+                        currentTarget.ProcessName, result.NewTarget.ProcessName);
+                    currentTarget = result.NewTarget;
+                    loopGuard.Reset();
+                    NotifyStatus($"Switched target to {currentTarget.ProcessName} (\"{currentTarget.WindowTitle}\")");
+
+                    if (IsSingleOpenIntent(goal))
+                    {
+                        NotifyStatus($"Goal successfully completed: {currentTarget.ProcessName} is open!");
+                        return AgentRunResult.Completed(step, history);
+                    }
+                }
             }
 
             NotifyStatus($"Max steps ({_options.MaxSteps}) reached.");
@@ -321,6 +339,12 @@ public class AgentLoop
             NotifyStatus($"Error: {ex.Message}");
             return AgentRunResult.Failed(step, history, ex.Message);
         }
+    }
+
+    private static bool IsSingleOpenIntent(string goal)
+    {
+        var trimmed = goal.Trim();
+        return Regex.IsMatch(trimmed, @"^(?:please\s+)?(?:open|launch|start|run)\s+(?:the\s+app\s+)?([a-zA-Z0-9\-_ ]+?)\.?$", RegexOptions.IgnoreCase);
     }
 
     private void NotifyStatus(string message)
