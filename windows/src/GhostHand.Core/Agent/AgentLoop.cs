@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using HolyHand.Core.Interfaces;
 using HolyHand.Core.Models;
 using HolyHand.Core.Safety;
@@ -169,10 +169,11 @@ public class AgentLoop
 
         try
         {
-            while (step < _options.MaxSteps)
+            while (_options.MaxSteps <= 0 || step < _options.MaxSteps)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 step++;
+                var stepPrefix = _options.MaxSteps > 0 ? $"Step {step}/{_options.MaxSteps}" : $"Step {step}";
 
                 // 0. Auto-sync target window if tracking service indicates active foreground app changed
                 if (_windowTracker != null)
@@ -189,19 +190,31 @@ public class AgentLoop
                 }
 
                 // 1. Observe screen elements
-                NotifyStatus($"Step {step}/{_options.MaxSteps}: Reading screen...");
+                NotifyStatus($"{stepPrefix}: Reading screen...");
                 var elements = await _screenReader.ReadElementsAsync(currentTarget, cancellationToken);
 
-                // 2. Loop guard stall check
+                // 2. Loop guard stall check - wait and continue if screen hasn't changed (may be loading)
                 if (loopGuard.RecordObservation(elements))
                 {
                     _logger.LogWarning("Stall detected: {Count} identical consecutive observations.", loopGuard.ConsecutiveStalls);
-                    NotifyStatus("Stall detected: screen state did not change.");
-                    return AgentRunResult.Stalled(step, history, "Loop guard tripped: screen state did not change across actions.");
+                    NotifyStatus($"Waiting for screen to update... (stall {loopGuard.ConsecutiveStalls}/{_options.MaxConsecutiveStalls})");
+                    // Wait up to 1.5s for the screen/page to load before re-reading
+                    await Task.Delay(1500, cancellationToken);
+                    elements = await _screenReader.ReadElementsAsync(currentTarget, cancellationToken);
+                    if (loopGuard.RecordObservation(elements))
+                    {
+                        // Screen truly stuck after retry - give up to avoid infinite spin
+                        _logger.LogWarning("Screen still unchanged after retry stall {Count}.", loopGuard.ConsecutiveStalls);
+                        if (loopGuard.IsStalled)
+                        {
+                            NotifyStatus("Screen state did not change — task may be complete or requires manual intervention.");
+                            return AgentRunResult.Stalled(step, history, "Loop guard tripped: screen state did not change across actions.");
+                        }
+                    }
                 }
 
                 // 3. Jev Call A: Next action & Goal completion check
-                NotifyStatus($"Step {step}/{_options.MaxSteps}: Choosing next action...");
+                NotifyStatus($"{stepPrefix}: Choosing next action...");
                 var decision = await _decisionModel.DecideNextActionAsync(goal, currentTarget, elements, history, cancellationToken);
 
                 // 4. Check if decision is Done
@@ -358,7 +371,7 @@ public class AgentLoop
 
                 // 8. Execute action (Dry-run or live)
                 var actionLabel = targetElement != null ? $"'{targetElement.DisplayLabel}'" : decision.TargetId;
-                NotifyStatus($"Step {step}/{_options.MaxSteps}: {decision.Operation} on {actionLabel}");
+                NotifyStatus($"{stepPrefix}: {decision.Operation} on {actionLabel}");
 
                 var result = await _actionExecutor.ExecuteAsync(decision, targetElement, cancellationToken);
 

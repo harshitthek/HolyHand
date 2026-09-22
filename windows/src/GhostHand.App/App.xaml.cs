@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Net.Http;
 using System.Windows;
 using HolyHand.App.Windows;
@@ -193,8 +193,8 @@ public partial class App : Application
                 var loopOptions = new AgentLoopOptions
                 {
                     DryRun = false,
-                    MaxSteps = 100,
-                    MaxConsecutiveStalls = 10
+                    MaxSteps = 0, // 0 = unlimited; runs until task completed or cancelled
+                    MaxConsecutiveStalls = 15
                 };
 
                 var windowTracker = _serviceProvider?.GetService<IWindowCaptureService>() as IWindowTracker;

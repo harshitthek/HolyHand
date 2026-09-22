@@ -1,10 +1,10 @@
-namespace HolyHand.Core.Agent;
+﻿namespace HolyHand.Core.Agent;
 
 public record AgentLoopOptions
 {
-    public int MaxSteps { get; init; } = 100;
+    public int MaxSteps { get; init; } = 0; // 0 = unlimited - runs until task completed or cancelled
     public bool DryRun { get; init; } = true;
-    public int MaxConsecutiveStalls { get; init; } = 10;
+    public int MaxConsecutiveStalls { get; init; } = 15;
     public int ActionTimeoutSeconds { get; init; } = 10;
 
     public static AgentLoopOptions FromEnvironment()
