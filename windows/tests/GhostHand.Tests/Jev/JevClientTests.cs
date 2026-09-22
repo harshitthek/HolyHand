@@ -276,11 +276,11 @@ public class JevClientTests
     }
 
     [Fact]
-    public async Task JV08_LowConfidenceDecision_ReturnsAskUser()
+    public async Task JV08_ExecutesTopAction_EvenWithLowConfidence_WithoutThresholdBlock()
     {
         var clientMock = new Mock<IJevClient>();
 
-        // Mock response with low confidence (0.45 < 0.70 threshold)
+        // Mock response with top choice having 0.45 probability across multiple choices
         var mockResponseJson = """
         {
             "answers": {
@@ -320,7 +320,8 @@ public class JevClientTests
 
         var decision = await model.DecideNextActionAsync("Search for test", target, elements, Array.Empty<string>());
 
-        decision.Operation.Should().Be(AgentOperation.AskUser);
-        decision.Reason.Should().Contain("below threshold");
+        decision.Operation.Should().Be(AgentOperation.Click);
+        decision.TargetId.Should().Be("btn1");
+        decision.TargetLabel.Should().Be("Search");
     }
 }

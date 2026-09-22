@@ -78,7 +78,7 @@ public class JevDecisionModel : IDecisionModel
         var response = await _jevClient.EvaluateAsync(request, cancellationToken);
 
         // Check if goal is already completed
-        if (response.TryGetBooleanAnswer("goalAchieved", out var goalProb, out var isAchieved) && isAchieved && goalProb >= _options.DecisionConfidenceThreshold)
+        if (response.TryGetBooleanAnswer("goalAchieved", out var goalProb, out var isAchieved) && isAchieved)
         {
             return new AgentDecision
             {
@@ -95,20 +95,8 @@ public class JevDecisionModel : IDecisionModel
             return new AgentDecision { Operation = AgentOperation.AskUser, Reason = "Could not parse decision" };
         }
 
-        // 4. Confidence gate: if top probability is below threshold, ask user
-        if (confidence < _options.DecisionConfidenceThreshold)
-        {
-            _logger.LogInformation("Top action '{Choice}' confidence {Conf:P0} below threshold {Thresh:P0}. Asking user.",
-                chosenKey, confidence, _options.DecisionConfidenceThreshold);
-
-            return new AgentDecision
-            {
-                Operation = AgentOperation.AskUser,
-                Reason = $"Confidence {confidence:P0} is below threshold {_options.DecisionConfidenceThreshold:P0}",
-                Confidence = confidence
-            };
-        }
-
+        // Execute chosen action directly as decided by the Jev model
+        _logger.LogInformation("Jev selected action: '{Choice}' (probability: {Conf:P0})", chosenKey, confidence);
         return ParseActionDecision(chosenKey, confidence, elements);
     }
 
@@ -146,7 +134,7 @@ public class JevDecisionModel : IDecisionModel
         var response = await _jevClient.EvaluateAsync(request, cancellationToken);
         if (response.TryGetBooleanAnswer("done", out var prob, out var isDone))
         {
-            return isDone && prob >= _options.DecisionConfidenceThreshold;
+            return isDone;
         }
 
         return false;
@@ -385,17 +373,22 @@ public class JevDecisionModel : IDecisionModel
         if (writeMatch.Success)
         {
             var val = writeMatch.Groups[1].Value.Trim();
-            val = Regex.Replace(val, @"\s+(?:in|into|to)\s+(?:notepad|document|file|editor|app).*$", "", RegexOptions.IgnoreCase).Trim();
+            val = Regex.Replace(val, @"\s+(?:in|into|to|on)\s+(?:notepad|document|file|editor|app|browser|search|bar|box).*$", "", RegexOptions.IgnoreCase).Trim();
             if (!string.IsNullOrEmpty(val) && !val.Equals("there", StringComparison.OrdinalIgnoreCase))
                 candidates.Add(val);
         }
 
-        // 3. Search queries: "search/look for <text>"
-        var searchMatch = Regex.Match(goal, @"(?:search|look)\s+for\s+(?:[""']?)(.+?)(?:[""']?)($|\.)", RegexOptions.IgnoreCase);
-        if (searchMatch.Success)
+        // 3. Search queries: "search/look up/find/google/query [for/about/on] <text>"
+        var searchMatches = Regex.Matches(
+            goal,
+            @"(?:search|look\s+up|find|google|query)(?:\s+(?:for|about|on|regarding|the\s+web\s+for))?\s+(?:[""']?)(.+?)(?:[""']?)(?:\s+(?:on|in|using|with)\s+[a-zA-Z0-9_\-]+|\.|$|\band\b)",
+            RegexOptions.IgnoreCase);
+        foreach (Match m in searchMatches)
         {
-            var val = searchMatch.Groups[1].Value.Trim();
-            if (!string.IsNullOrEmpty(val)) candidates.Add(val);
+            var val = m.Groups[1].Value.Trim();
+            val = Regex.Replace(val, @"^(?:for|about|on)\s+", "", RegexOptions.IgnoreCase).Trim();
+            if (!string.IsNullOrEmpty(val))
+                candidates.Add(val);
         }
 
         // 4. Calculations: "calculate/compute <expression>"

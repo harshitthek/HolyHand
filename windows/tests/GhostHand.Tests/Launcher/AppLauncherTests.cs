@@ -131,6 +131,9 @@ public class AppLauncherTests
     [InlineData("search for Adele on youtube", "youtube.com", "Adele")]
     [InlineData("search for quantum computing on google", "google.com", "quantum")]
     [InlineData("google current weather", "google.com", "weather")]
+    [InlineData("open brave and search lion", "google.com", "lion")]
+    [InlineData("search about lion", "google.com", "lion")]
+    [InlineData("search lion in brave", "google.com", "lion")]
     [InlineData("open github.com", "github.com", "")]
     [InlineData("visit wikipedia.org", "wikipedia.org", "")]
     public void AL06_TryExtractUrlLaunch_SynthesizesWebSearchesAndSites(string goal, string expectedHost, string expectedQueryFragment)
@@ -156,5 +159,16 @@ public class AppLauncherTests
 
         success.Should().BeTrue();
         appName.ToLowerInvariant().Should().Be(expectedApp.ToLowerInvariant());
+    }
+
+    [Theory]
+    [InlineData("open brave and search lion", "lion")]
+    [InlineData("search about lion", "lion")]
+    [InlineData("open chrome and search for weather", "weather")]
+    [InlineData("write hello into notepad", "hello")]
+    public void AL08_ExtractCandidatePhrases_ExtractsSearchAndWriteTerms(string goal, string expectedPhrase)
+    {
+        var candidates = JevDecisionModel.ExtractCandidatePhrases(goal);
+        candidates.Should().Contain(expectedPhrase);
     }
 }

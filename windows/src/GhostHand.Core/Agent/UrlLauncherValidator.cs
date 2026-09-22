@@ -120,6 +120,36 @@ public static class UrlLauncherValidator
             }
         }
 
+        // 5. General search intent (e.g. "open brave and search lion", "search about lion", "search python in chrome")
+        var generalSearchMatch = Regex.Match(
+            prompt,
+            @"(?:(?:open|launch|start)\s+[a-zA-Z0-9_\- ]+?\s+(?:and|then)\s+)?(?:search|look\s+up|find|query)(?:\s+(?:for|about|on|regarding|the\s+web\s+for))?\s+(.+?)(?:\s+(?:on|in|using|with)\s+([a-zA-Z0-9\-_]+)|\.|$)",
+            RegexOptions.IgnoreCase);
+
+        if (generalSearchMatch.Success)
+        {
+            var query = generalSearchMatch.Groups[1].Value.Trim().Trim('"', '\'');
+            var engineOrApp = generalSearchMatch.Groups[2].Success ? generalSearchMatch.Groups[2].Value.Trim().ToLowerInvariant() : "";
+
+            if (!string.IsNullOrWhiteSpace(query) && query.Length > 1 && !query.Equals("there", StringComparison.OrdinalIgnoreCase))
+            {
+                var searchUrl = engineOrApp switch
+                {
+                    "youtube" => $"https://www.youtube.com/results?search_query={Uri.EscapeDataString(query)}",
+                    "bing" => $"https://www.bing.com/search?q={Uri.EscapeDataString(query)}",
+                    "reddit" => $"https://www.reddit.com/search/?q={Uri.EscapeDataString(query)}",
+                    "wikipedia" => $"https://en.wikipedia.org/wiki/Special:Search?search={Uri.EscapeDataString(query)}",
+                    _ => $"https://www.google.com/search?q={Uri.EscapeDataString(query)}"
+                };
+
+                if (IsValidWebUrl(searchUrl, out var uri) && uri != null)
+                {
+                    list.Add(uri);
+                    return list;
+                }
+            }
+        }
+
         return list;
     }
 }
