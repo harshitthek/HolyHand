@@ -21,3 +21,7 @@ publish/
 bin/
 obj/
 *.zip
+
+CLAUDE.md/
+AGENTS.md/
+docs/

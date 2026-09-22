@@ -86,12 +86,6 @@ dotnet test windows/HolyHand.sln
 dotnet publish windows/src/HolyHand.App/HolyHand.App.csproj -c Release -r win-x64 --self-contained true -p:PublishReadyToRun=true -o dist/HolyHand-win-x64
 ```
 
----
-
-## Upstream & Credits
-
-HolyHand is based on [Third Hand](https://github.com/shhivv/third-hand) by Shiv Shanmugam (`shiv@tryisle.com`), licensed under the MIT License. See [NOTICE](NOTICE) for full attribution.
-
 ## License
 
 Licensed under the [MIT License](LICENSE).
