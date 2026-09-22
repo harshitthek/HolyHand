@@ -58,3 +58,6 @@
 | W18 | Self-contained publish (x64) | done (tested) | publish/HolyHand-win-x64 | ReadyToRun win-x64, zip package (HolyHand-v0.1.0-win-x64.zip) |
 | W19 | GitHub Actions CI & Release | done (tested) | .github/workflows/ | ci.yml & release.yml on windows-latest |
 | W20 | Start-at-login toggle | not started | — | Registry or Task Scheduler |
+| W21 | Universal PC App Discovery | done (tested) | AppLauncherTests.cs | Start Menu .lnk scanner, Registry App Paths lookup, running window handoff |
+| W22 | Web Search & Site Synthesis | done (tested) | AppLauncherTests.cs, UrlLauncherValidator.cs | Direct browser launch for YouTube, Google, Reddit, etc. queries |
+| W23 | Strict Deletion Prohibition | done (tested) | RiskPolicyTests.cs, AgentLoop.cs | Immediate refusal of deletion tasks & deletion UI actions (RS10..13) |
