@@ -97,9 +97,8 @@ public partial class App : Application
         services.AddSingleton<IWindowCaptureService, WindowCaptureService>();
         services.AddSingleton<IHotkeyService, LowLevelKeyboardHook>();
         services.AddSingleton<IAppLauncher, AppLauncher>();
-        services.AddSingleton<WindowsSpeechService>();
         services.AddSingleton<ISpeechInput>(sp => new WhisperSpeechService(
-            fallbackService: sp.GetRequiredService<WindowsSpeechService>(),
+            fallbackService: null, // No fallback — WindowsSpeechService requires privacy policy acceptance
             logger: sp.GetService<ILogger<WhisperSpeechService>>()));
     }
 

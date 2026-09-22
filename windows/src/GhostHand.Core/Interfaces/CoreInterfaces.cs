@@ -1,4 +1,4 @@
-using HolyHand.Core.Models;
+﻿using HolyHand.Core.Models;
 using HolyHand.Core.Safety;
 
 namespace HolyHand.Core.Interfaces;
@@ -81,6 +81,10 @@ public interface ICredentialStore
 
 public interface ISpeechInput : IDisposable
 {
+    /// <summary>Fired with partial/hypothesis text while recording is in progress.</summary>
+    event Action<string>? SpeechRecognizing;
+
+    /// <summary>Record audio and return the final transcription.</summary>
     Task<string> TranscribeAsync(CancellationToken cancellationToken = default);
 }
 

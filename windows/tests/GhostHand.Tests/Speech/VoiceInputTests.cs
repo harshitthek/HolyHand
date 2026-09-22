@@ -1,12 +1,12 @@
-using System.IO;
+﻿using System.IO;
 using FluentAssertions;
 using HolyHand.Core.Agent;
-using HolyHand.Core.Common;
 using HolyHand.Core.Interfaces;
 using HolyHand.Core.Models;
 using HolyHand.Platform.Speech;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Whisper.net;
 using Xunit;
 
 namespace HolyHand.Tests.Speech;
@@ -16,23 +16,17 @@ public class VoiceInputTests
     [Fact]
     public async Task VO_01_NoAudioDevice_FallsBackGracefullyToSecondaryService()
     {
-        // Arrange: mock fallback recognizer
         var mockFallback = new Mock<ISpeechInput>();
         mockFallback
             .Setup(f => f.TranscribeAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync("fallback transcript");
 
-        // Service configured with invalid model dir to avoid downloading during test
         using var whisperService = new WhisperSpeechService(
             fallbackService: mockFallback.Object,
             customModelDir: Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")),
             logger: NullLogger<WhisperSpeechService>.Instance);
 
-        // Act
-        // If WaveInEvent.DeviceCount == 0 or model fails to load, fallback is called
         var result = await whisperService.TranscribeAsync(CancellationToken.None);
-
-        // Assert
         result.Should().Be("fallback transcript");
         mockFallback.Verify(f => f.TranscribeAsync(It.IsAny<CancellationToken>()), Times.AtLeastOnce);
     }
@@ -40,22 +34,19 @@ public class VoiceInputTests
     [Fact]
     public async Task VO_01_NoDeviceAndNoFallback_ThrowsDescriptiveExceptionWithoutCrash()
     {
-        // Arrange
         using var whisperService = new WhisperSpeechService(
             fallbackService: null,
             customModelDir: Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")),
             logger: NullLogger<WhisperSpeechService>.Instance);
 
-        // Act & Assert
-        // Should throw descriptive InvalidOperationException, never an unhandled crash
         var act = async () => await whisperService.TranscribeAsync(CancellationToken.None);
-        await act.Should().ThrowAsync<InvalidOperationException>();
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*microphone*");
     }
 
     [Fact]
     public async Task VO_02_TranscriptFeedsIntoSameLoopAsTypedText()
     {
-        // Arrange: Fake recognizer returns transcript
         var fakeSpeechInput = new Mock<ISpeechInput>();
         fakeSpeechInput
             .Setup(s => s.TranscribeAsync(It.IsAny<CancellationToken>()))
@@ -105,14 +96,12 @@ public class VoiceInputTests
             new AgentLoopOptions { MaxSteps = 3, DryRun = true },
             NullLogger<AgentLoop>.Instance);
 
-        // Act: Voice transcript feeds directly into loop
         var transcript = await fakeSpeechInput.Object.TranscribeAsync();
         transcript.Should().Be("open calculator");
 
         var target = new AppTarget { ProcessId = 1234, ProcessName = "calc", WindowTitle = "Calculator" };
         var result = await loop.RunAsync(transcript, target, CancellationToken.None);
 
-        // Assert: Verified loop ran with the exact transcript goal
         result.Status.Should().Be(AgentRunStatus.Completed);
         mockDecisionModel.Verify(d => d.DecideNextActionAsync(
             "open calculator",
@@ -125,13 +114,11 @@ public class VoiceInputTests
     [Fact]
     public async Task VO_03_MissingWhisperModel_FallsBackGracefully()
     {
-        // Arrange: fallback recognizer returns speech
         var fallbackRecognizer = new Mock<ISpeechInput>();
         fallbackRecognizer
             .Setup(f => f.TranscribeAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync("fallback result");
 
-        // Non-existent directory, invalid file
         var emptyDir = Path.Combine(Path.GetTempPath(), "holyhand_nonexistent_" + Guid.NewGuid().ToString("N"));
 
         using var whisperService = new WhisperSpeechService(
@@ -139,10 +126,23 @@ public class VoiceInputTests
             customModelDir: emptyDir,
             logger: NullLogger<WhisperSpeechService>.Instance);
 
-        // Act
         var result = await whisperService.TranscribeAsync(CancellationToken.None);
-
-        // Assert
         result.Should().Be("fallback result");
+    }
+
+    [Fact]
+    public void VO_04_WhisperProcessor_LoadsDownloadedModelSuccessfully()
+    {
+        var modelPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "HolyHand", "models", "ggml-tiny.bin");
+        if (!File.Exists(modelPath)) return;
+
+        using var factory = WhisperFactory.FromPath(modelPath);
+        using var processor = factory.CreateBuilder()
+            .WithLanguage("auto")
+            .WithNoContext()
+            .WithSingleSegment()
+            .Build();
+
+        processor.Should().NotBeNull();
     }
 }

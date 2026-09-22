@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Input;
 using HolyHand.Core.Interfaces;
 using HolyHand.Core.Models;
@@ -8,12 +8,13 @@ namespace HolyHand.App.Windows;
 public partial class PromptPopupWindow : Window
 {
     private AppTarget? _currentTarget;
+    private bool _isListening;
+    private CancellationTokenSource? _speechCts;
+
     public event Action<string, AppTarget?>? TaskSubmitted;
     public event Action? Cancelled;
 
     public ISpeechInput? SpeechInput { get; set; }
-    private CancellationTokenSource? _speechCts;
-    private bool _isListening;
 
     public PromptPopupWindow()
     {
@@ -23,6 +24,8 @@ public partial class PromptPopupWindow : Window
     public void ShowForTarget(AppTarget? target)
     {
         _currentTarget = target;
+        _isListening = false;
+        MicButton.Content = "🎤 Mic";
 
         if (target != null)
         {
@@ -32,7 +35,7 @@ public partial class PromptPopupWindow : Window
 
             if (target.IsElevated)
             {
-                StatusText.Text = "⚠️ Target process is running elevated (Admin). UIPI restricts automation.";
+                StatusText.Text = "⚠ Target process is elevated (Admin). UIPI restricts automation.";
                 StatusText.Foreground = System.Windows.Media.Brushes.OrangeRed;
             }
             else
@@ -86,8 +89,8 @@ public partial class PromptPopupWindow : Window
         Dispatcher.Invoke(() =>
         {
             StatusText.Text = status;
-            StatusText.Foreground = isError 
-                ? System.Windows.Media.Brushes.OrangeRed 
+            StatusText.Foreground = isError
+                ? System.Windows.Media.Brushes.OrangeRed
                 : System.Windows.Media.Brushes.LightSkyBlue;
         });
     }
@@ -99,7 +102,7 @@ public partial class PromptPopupWindow : Window
             SetExecuting(false);
             if (!success)
             {
-                StatusText.Text = "⚠️ " + message;
+                StatusText.Text = "⚠ " + message;
                 StatusText.Foreground = System.Windows.Media.Brushes.OrangeRed;
                 Show();
                 Activate();
@@ -119,15 +122,12 @@ public partial class PromptPopupWindow : Window
     {
         _speechCts?.Cancel();
         var goal = PromptInput.Text.Trim();
-        if (string.IsNullOrWhiteSpace(goal))
-        {
-            return;
-        }
+        if (string.IsNullOrWhiteSpace(goal)) return;
 
         if (_currentTarget?.IsElevated == true)
         {
             MessageBox.Show(
-                "HolyHand cannot automate an elevated (Administrator) application from a standard user session.\n\nPlease activate a standard window or start HolyHand with administrator rights.",
+                "HolyHand cannot automate an elevated (Administrator) application.\n\nPlease activate a standard window or restart HolyHand as administrator.",
                 "Target is Elevated",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
@@ -145,18 +145,13 @@ public partial class PromptPopupWindow : Window
             : Visibility.Collapsed;
     }
 
-    private void SendButton_Click(object sender, RoutedEventArgs e)
-    {
-        Submit();
-    }
+    private void SendButton_Click(object sender, RoutedEventArgs e) => Submit();
 
-    private void CloseButton_Click(object sender, RoutedEventArgs e)
-    {
-        HidePopup();
-    }
+    private void CloseButton_Click(object sender, RoutedEventArgs e) => HidePopup();
 
     private async void MicButton_Click(object sender, RoutedEventArgs e)
     {
+        // If already listening, stop recording
         if (_isListening)
         {
             _speechCts?.Cancel();
@@ -165,7 +160,8 @@ public partial class PromptPopupWindow : Window
 
         if (SpeechInput == null)
         {
-            StatusText.Text = "Voice input is not available.";
+            StatusText.Text = "⚠ Voice input is not available.";
+            StatusText.Foreground = System.Windows.Media.Brushes.OrangeRed;
             return;
         }
 
@@ -174,39 +170,63 @@ public partial class PromptPopupWindow : Window
         _speechCts = new CancellationTokenSource();
         var token = _speechCts.Token;
 
-        MicButton.Content = "🔴 Stop";
-        StatusText.Text = "🎙️ Listening... Speak your goal";
-        StatusText.Foreground = System.Windows.Media.Brushes.LightSkyBlue;
+        MicButton.Content = "⏹ Stop";
+        StatusText.Text = "🎙 Listening… speak your command (auto-submits when done)";
+        StatusText.Foreground = System.Windows.Media.Brushes.LightGreen;
+
+        void OnSpeechRecognizing(string partial)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                StatusText.Text = $"📝 \"{partial}\"";
+                StatusText.Foreground = System.Windows.Media.Brushes.LightSkyBlue;
+            });
+        }
+        SpeechInput.SpeechRecognizing += OnSpeechRecognizing;
 
         try
         {
             var transcript = await SpeechInput.TranscribeAsync(token);
+
+            SpeechInput.SpeechRecognizing -= OnSpeechRecognizing;
+
             if (!string.IsNullOrWhiteSpace(transcript))
             {
                 PromptInput.Text = transcript;
-                StatusText.Text = $"Recognized: \"{transcript}\"";
+                StatusText.Text = $"✓ \"{transcript}\" — executing…";
+                StatusText.Foreground = System.Windows.Media.Brushes.LightGreen;
+
+                await Task.Delay(350);
                 Submit();
+            }
+            else if (token.IsCancellationRequested)
+            {
+                StatusText.Text = "Voice recording cancelled.";
+                StatusText.Foreground = System.Windows.Media.Brushes.Gray;
             }
             else
             {
-                StatusText.Text = "No speech detected. Speak clearly or type your goal.";
-                StatusText.Foreground = System.Windows.Media.Brushes.Gray;
+                StatusText.Text = "No speech detected. Speak clearly and try again.";
+                StatusText.Foreground = System.Windows.Media.Brushes.OrangeRed;
             }
         }
         catch (OperationCanceledException)
         {
-            StatusText.Text = "Voice input cancelled.";
+            SpeechInput.SpeechRecognizing -= OnSpeechRecognizing;
+            StatusText.Text = "Voice recording cancelled.";
             StatusText.Foreground = System.Windows.Media.Brushes.Gray;
         }
         catch (Exception ex)
         {
-            StatusText.Text = "⚠️ " + ex.Message;
+            SpeechInput.SpeechRecognizing -= OnSpeechRecognizing;
+            var msg = ex.Message.StartsWith("⚠") ? ex.Message : "⚠ " + ex.Message;
+            StatusText.Text = msg;
             StatusText.Foreground = System.Windows.Media.Brushes.OrangeRed;
         }
         finally
         {
             _isListening = false;
-            MicButton.Content = "🎙️ Mic";
+            MicButton.Content = "🎤 Mic";
         }
     }
 
