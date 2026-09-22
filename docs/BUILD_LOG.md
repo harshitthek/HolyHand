@@ -469,6 +469,44 @@ Supporting files: `README.md`, `Package.swift`, `LICENSE`, `rebuild.sh`
 - All 71 unit and integration tests passing.
 - Verified packaged `HolyHand.Cli.exe check` against live Vercel AI Gateway: latency 1486ms, exit code 0.
 
+---
+
+## 2026-09-22 — M7: Voice Input (Whisper.net & Windows Speech) & First-Run Setup Dialog
+
+### Session Details
+- **Date**: 2026-09-22
+- **Milestone**: M7 — Voice Input & Windows Credential Manager First-Run Setup
+
+### Components Built
+1. **Windows Credential Manager Integration** (`HolyHand.Platform/Safety/CredentialStore.cs`):
+   - Implemented `ICredentialStore` via Win32 `Advapi32.dll` (`CredReadW`, `CredWriteW`, `CredDeleteW`, `CredFree`).
+   - Securely persists API key under targets `HolyHand/AI_GATEWAY_API_KEY` and `HolyHand/AI_GATEWAY_API_KEY`.
+   - Priority hierarchy: `AI_GATEWAY_API_KEY` environment variable -> Windows Credential Manager.
+2. **First-Run Setup Dialog** (`HolyHand.App/Windows/ApiKeySetupDialog.xaml` + `.cs`):
+   - Modern dark-glass modal displayed on first startup if no key is detected in environment or Credential Manager.
+   - Saves entered key directly to Windows Credential Manager, enabling instant zero-config experience.
+3. **Local Private Voice Input** (`HolyHand.Platform/Speech/WhisperSpeechService.cs`):
+   - Audio capture via `NAudio.Wave.WaveInEvent` (16kHz, 16-bit mono PCM). Zero audio data leaves the user's PC.
+   - Local on-device CPU transcription powered by `Whisper.net` and `Whisper.net.Runtime` (whisper.cpp).
+   - On-demand automatic download of `ggml-tiny.bin` (~75MB) to `%LOCALAPPDATA%\HolyHand\models\`.
+   - Graceful fallback to `WindowsSpeechService` (`Windows.Media.SpeechRecognition`) if audio hardware is absent, CPU lacks instructions, or model is unavailable.
+4. **Push-to-Talk Voice Triggering in Popup** (`HolyHand.App/Windows/PromptPopupWindow.xaml.cs`):
+   - Mic button triggers push-to-talk recording with live UI status.
+   - Transcribed speech automatically populates the goal input box and feeds into the Jev decision loop.
+
+### Test Results
+- Unit & integration tests in `VoiceInputTests.cs` and `CredentialStoreTests.cs`:
+  - **VO-01**: Graceful fallback / descriptive exception on missing audio device without unhandled crashes (Passed).
+  - **VO-02**: Speech transcript feeds into the exact same agent loop path as typed text (Passed).
+  - **VO-03**: Missing Whisper model falls back gracefully to secondary recognizer (Passed).
+  - **SP-02**: Windows Credential Manager round-trip save, retrieve, delete, and environment variable override verified (Passed).
+- Total tests passing: **120 passed, 0 failed, 0 skipped**.
+- Build status: **0 Warning(s), 0 Error(s)** across all 5 projects.
+
+### Distribution & Release
+- Updated self-contained ReadyToRun release build: `publish/HolyHand-v0.1.0-win-x64.zip` (89.8 MB).
+
+
 
 
 

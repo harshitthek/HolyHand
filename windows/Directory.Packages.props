@@ -21,6 +21,11 @@
     <!-- UI & Tray -->
     <PackageVersion Include="H.NotifyIcon.Wpf" Version="2.1.4" />
 
+    <!-- Speech & Audio -->
+    <PackageVersion Include="NAudio" Version="2.2.1" />
+    <PackageVersion Include="Whisper.net" Version="1.7.4" />
+    <PackageVersion Include="Whisper.net.Runtime" Version="1.7.4" />
+
     <!-- Logging -->
     <PackageVersion Include="Serilog" Version="4.0.2" />
     <PackageVersion Include="Serilog.Extensions.Logging" Version="8.0.0" />

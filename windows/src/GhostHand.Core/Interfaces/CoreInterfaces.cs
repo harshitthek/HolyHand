@@ -74,6 +74,7 @@ public interface IAuditLog
 public interface ICredentialStore
 {
     string? GetApiKey();
+    bool HasKey();
     void SetApiKey(string apiKey);
     void DeleteApiKey();
 }

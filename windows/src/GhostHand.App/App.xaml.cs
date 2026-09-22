@@ -62,6 +62,15 @@ public partial class App : Application
         _windowCapture = _serviceProvider.GetRequiredService<IWindowCaptureService>();
         _hotkeyService = _serviceProvider.GetRequiredService<IHotkeyService>();
 
+        // Check if API key is configured; if not, show first-run setup dialog
+        var credentialStore = _serviceProvider.GetRequiredService<ICredentialStore>();
+        if (!credentialStore.HasKey())
+        {
+            _logger.LogInformation("No API key found in environment or Credential Manager. Showing setup dialog.");
+            var setupDialog = new ApiKeySetupDialog(credentialStore);
+            setupDialog.ShowDialog();
+        }
+
         // Pre-create windows (hidden at startup for instant display)
         _popup = new PromptPopupWindow();
         _popup.SpeechInput = _serviceProvider.GetService<ISpeechInput>();
@@ -84,10 +93,14 @@ public partial class App : Application
             builder.AddConsole();
         });
 
+        services.AddSingleton<ICredentialStore, CredentialStore>();
         services.AddSingleton<IWindowCaptureService, WindowCaptureService>();
         services.AddSingleton<IHotkeyService, LowLevelKeyboardHook>();
         services.AddSingleton<IAppLauncher, AppLauncher>();
-        services.AddSingleton<ISpeechInput, WindowsSpeechService>();
+        services.AddSingleton<WindowsSpeechService>();
+        services.AddSingleton<ISpeechInput>(sp => new WhisperSpeechService(
+            fallbackService: sp.GetRequiredService<WindowsSpeechService>(),
+            logger: sp.GetService<ILogger<WhisperSpeechService>>()));
     }
 
     private void OnHotkeyPressed(object? sender, EventArgs e)
@@ -142,7 +155,20 @@ public partial class App : Application
         {
             try
             {
+                var credentialStore = _serviceProvider?.GetService<ICredentialStore>() ?? new CredentialStore();
                 var jevOptions = JevOptions.FromEnvironment();
+                if (string.IsNullOrWhiteSpace(jevOptions.ApiKey))
+                {
+                    jevOptions.ApiKey = credentialStore.GetApiKey();
+                }
+
+                if (string.IsNullOrWhiteSpace(jevOptions.ApiKey))
+                {
+                    _logger?.LogWarning("No API key available for agent loop.");
+                    _popup?.OnRunCompleted("API key is not configured. Please set AI_GATEWAY_API_KEY.", false);
+                    return;
+                }
+
                 using var httpClient = new HttpClient();
                 var jevClient = new JevClient(httpClient, jevOptions, NullLogger<JevClient>.Instance);
                 var decisionModel = new JevDecisionModel(jevClient, jevOptions, NullLogger<JevDecisionModel>.Instance);

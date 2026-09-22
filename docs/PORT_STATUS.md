@@ -29,7 +29,7 @@
 | 20 | Action verification (post-action) | done (tested) | AgentLoop.cs, AgentLoopTests.cs | Re-snapshot comparison and goal verification |
 | 21 | OCR fallback (Apple Vision → Win OCR) | done (tested) | WindowsOcrService.cs, ScreenReaderTests.cs | Windows.Media.Ocr local fallback (RD-06) |
 | 22 | Window snapshot (for OCR) | done (tested) | WindowsOcrService.cs | Graphics.CopyFromScreen / WinRT SoftwareBitmap |
-| 23 | API key storage (Keychain → Cred Mgr) | done (tested) | EnvLoader.cs | Process environment + AppContext .env loading |
+| 23 | API key storage (Keychain → Cred Mgr) | done (tested) | CredentialStore.cs, CredentialStoreTests.cs | Windows Credential Manager + env var precedence (SP-02) |
 | 24 | Error detail extraction + key redaction | done (tested) | JevExceptions.cs | Regex redaction for vck_* and Bearer tokens (JV-06) |
 | 25 | CDP browser support (Electron) | not started | — | M9, optional |
 | 26 | Electron detection | not started | — | M9, optional |
@@ -48,12 +48,12 @@
 | W8 | Audit log (JSONL) | done (tested) | JsonlAuditLog.cs, AuditLogTests.cs | Local audit in %LOCALAPPDATA%\HolyHand\audit with secret redaction |
 | W9 | Per-app deny-list | done (tested) | RiskPolicyTests.cs | Blocks 1Password, Bitwarden, KeePass, etc. (RS-09) |
 | W10 | Elevated target (UIPI) detection | done (tested) | WindowCaptureService.cs | Process integrity level & access check |
-| W11 | Voice input (Whisper.net) | not started | — | NAudio + whisper.cpp |
+| W11 | Voice input (Whisper.net) | done (tested) | WhisperSpeechService.cs, VoiceInputTests.cs | NAudio capture + Whisper.net local inference + Windows Speech fallback (VO-01..03) |
 | W12 | Dry-run mode (default) | done (tested) | AgentLoop.cs, HolyHand.Cli | Simulated execution default until M6; CLI dry-run tool |
 | W13 | Single-instance guard | done (tested) | App.xaml.cs | Global Named Mutex |
 | W14 | Per-monitor DPI v2 | done (tested) | app.manifest | PerMonitorV2 enabled |
 | W15 | System theme following (light/dark) | not started | — | Registry watch or WinRT |
-| W16 | First-run API key setup dialog | not started | — | WPF dialog → Credential Manager |
+| W16 | First-run API key setup dialog | done (tested) | ApiKeySetupDialog.xaml, App.xaml.cs | WPF dark-glass dialog stores key to Windows Credential Manager |
 | W17 | CLI diagnostics (check, snapshot, dry-run) | done (tested) | HolyHand.Cli | `check` subcommand performs live Gateway call (verified 843ms, $0 cost) |
 | W18 | Self-contained publish (x64) | done (tested) | publish/HolyHand-win-x64 | ReadyToRun win-x64, zip package (HolyHand-v0.1.0-win-x64.zip) |
 | W19 | GitHub Actions CI & Release | done (tested) | .github/workflows/ | ci.yml & release.yml on windows-latest |
