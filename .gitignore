@@ -1,11 +1,3 @@
-.build/
-.DS_Store
-Third Hand.app/
-*.swp
-.swiftpm/
-
-.holyhand-signing-identity
-
 # Local credentials and diagnostics
 .env
 .env.*
