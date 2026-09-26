@@ -7,8 +7,7 @@ namespace HolyHand.Platform.Safety;
 
 public class CredentialStore : ICredentialStore
 {
-    private const string TargetNamePrimary = "HolyHand/AI_GATEWAY_API_KEY";
-    private const string TargetNameSecondary = "HolyHand/AI_GATEWAY_API_KEY";
+    private const string TargetName = "HolyHand/AI_GATEWAY_API_KEY";
     private const int CRED_TYPE_GENERIC = 1;
     private const int CRED_PERSIST_LOCAL_MACHINE = 2;
 
@@ -29,7 +28,7 @@ public class CredentialStore : ICredentialStore
         }
 
         // 2. Windows Credential Manager
-        return ReadCredential(TargetNamePrimary) ?? ReadCredential(TargetNameSecondary);
+        return ReadCredential(TargetName);
     }
 
     public bool HasKey()
@@ -45,14 +44,12 @@ public class CredentialStore : ICredentialStore
             throw new ArgumentException("API key cannot be empty", nameof(apiKey));
         }
 
-        WriteCredential(TargetNamePrimary, apiKey.Trim());
-        WriteCredential(TargetNameSecondary, apiKey.Trim());
+        WriteCredential(TargetName, apiKey.Trim());
     }
 
     public void DeleteApiKey()
     {
-        DeleteCredential(TargetNamePrimary);
-        DeleteCredential(TargetNameSecondary);
+        DeleteCredential(TargetName);
     }
 
     private string? ReadCredential(string target)

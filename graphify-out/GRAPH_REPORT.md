@@ -1,4 +1,4 @@
-# Graph Report - third-hand  (2026-09-21)
+# Graph Report - HolyHand  (2026-09-21)
 
 ## Corpus Check
 - 74 files · ~33,949 words
@@ -38,7 +38,7 @@
 - AppKit
 - LowLevelKeyboardHook
 - HolyHand — Architecture Decision Records
-- Third Hand
+- HolyHand
 - windows/NativeMethods.json
 - HolyHand — Agent Instructions
 - HolyHand — Port Status
@@ -181,9 +181,9 @@ Nodes (16): CancellationTokenSource, Channel, DllImport, HHOOK, HOOKPROC, LPARAM
 Cohesion: 0.22
 Nodes (8): ADR-001: .NET 8 LTS over .NET 9, ADR-002: Vercel AI Gateway vs Direct TypeSafe API, ADR-003: Ctrl+Win Chord via Low-Level Hook + State Machine, ADR-004: FlaUI.UIA3 for UI Automation, ADR-005: CsWin32 Source Generator for P/Invoke, ADR-006: Serilog with File Sink for Logging, ADR-007: Whisper.net for Local Voice Input, HolyHand — Architecture Decision Records
 
-### Community 23 - "Third Hand"
+### Community 23 - "HolyHand"
 Cohesion: 0.25
-Nodes (7): Build from source, Development, Download, How it works, License, Status, Third Hand
+Nodes (7): Build from source, Development, Download, How it works, License, Status, HolyHand
 
 ### Community 24 - "windows/NativeMethods.json"
 Cohesion: 0.50

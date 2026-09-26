@@ -1,6 +1,6 @@
 .build/
 .DS_Store
-Third Hand.app/
+HolyHand.app/
 *.swp
 .swiftpm/
 

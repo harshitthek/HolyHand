@@ -2,7 +2,7 @@
 HolyHand (Windows) - AI Desktop Assistant
 ========================================================================
 
-HolyHand is a Windows-native AI assistant inspired by macOS Third Hand.
+HolyHand is a Windows-native AI assistant inspired by macOS HolyHand.
 It allows you to focus any application, press a global hotkey, and command
 it using plain text or voice.
 
