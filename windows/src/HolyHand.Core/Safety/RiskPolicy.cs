@@ -1,4 +1,4 @@
-﻿using System.Text.RegularExpressions;
+using System.Text.RegularExpressions;
 using HolyHand.Core.Interfaces;
 using HolyHand.Core.Models;
 using Microsoft.Extensions.Logging;
@@ -6,15 +6,19 @@ using Microsoft.Extensions.Logging;
 namespace HolyHand.Core.Safety;
 
 /// <summary>
-/// Jarvis-mode risk policy: execute ALL tasks automatically.
-/// The ONLY restriction is deletion operations — these are permanently prohibited.
-/// No confirmation dialogs for anything else.
+/// Guardian-mode risk policy: enforces human confirmation gates for sensitive and irreversible actions,
+/// blocks data deletion operations permanently, and auto-executes harmless routine navigation.
 /// </summary>
 public class RiskPolicy : IRiskPolicy
 {
+    private static readonly Regex SensitiveFieldRegex = new(
+        @"\b(password|pin|ssn|social security)\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     private readonly RiskPolicyOptions _options;
     private readonly ILogger<RiskPolicy> _logger;
     private readonly Regex _prohibitedRegex;
+    private readonly Regex _sensitiveRegex;
 
     public RiskPolicy(RiskPolicyOptions? options = null, ILogger<RiskPolicy>? logger = null)
     {
@@ -33,6 +37,19 @@ public class RiskPolicy : IRiskPolicy
         {
             _prohibitedRegex = new Regex(@"^$", RegexOptions.Compiled); // never matches
         }
+
+        // Build word-boundary regex for sensitive action verbs
+        if (_options.SensitiveVerbs.Count > 0)
+        {
+            var sensitivePatterns = _options.SensitiveVerbs.Select(Regex.Escape);
+            _sensitiveRegex = new Regex(
+                $@"\b({string.Join("|", sensitivePatterns)})\b",
+                RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        }
+        else
+        {
+            _sensitiveRegex = new Regex(@"^$", RegexOptions.Compiled);
+        }
     }
 
     /// <summary>
@@ -47,13 +64,24 @@ public class RiskPolicy : IRiskPolicy
             return true;
         }
 
+        foreach (var denied in _options.DenyListedProcesses)
+        {
+            if (appTarget.WindowTitle.Contains(denied, StringComparison.OrdinalIgnoreCase))
+            {
+                reason = $"Window title '{appTarget.WindowTitle}' matches deny-listed application '{denied}'.";
+                _logger.LogWarning("Security deny-list triggered: {Reason}", reason);
+                return true;
+            }
+        }
+
         reason = string.Empty;
         return false;
     }
 
     /// <summary>
-    /// Jarvis mode: NEVER requires human confirmation.
-    /// All safe actions are auto-executed. Only deletion goals are blocked (via IsGoalProhibited / IsActionProhibited).
+    /// Checks if a proposed action requires human confirmation.
+    /// Actions matching sensitive verbs (e.g. Submit, Pay, Buy, Apply, Send) or targeting sensitive fields
+    /// unconditionally require human approval before execution.
     /// </summary>
     public bool RequiresConfirmation(
         AgentDecision decision,
@@ -61,7 +89,77 @@ public class RiskPolicy : IRiskPolicy
         AppTarget appTarget,
         out string reason)
     {
-        // Jarvis mode: zero confirmation dialogs — always auto-execute
+        // 1. Benign agent control flow never requires confirmation
+        if (decision.Operation is AgentOperation.Done or AgentOperation.AskUser or AgentOperation.Wait)
+        {
+            reason = string.Empty;
+            return false;
+        }
+
+        // 2. Pure navigation actions are harmless
+        if (decision.Operation is AgentOperation.ScrollDown or AgentOperation.ScrollUp
+            or AgentOperation.PressTab or AgentOperation.PressEscape)
+        {
+            reason = string.Empty;
+            return false;
+        }
+
+        // 3. Model risk score escalation check
+        if (decision.RiskScore >= _options.EscalateOnRiskScore)
+        {
+            reason = $"Action risk score '{decision.RiskScore}' meets or exceeds confirmation threshold '{_options.EscalateOnRiskScore}'.";
+            _logger.LogInformation("Action requires confirmation (model risk escalation): {Reason}", reason);
+            return true;
+        }
+
+        // 4. Password / secret fields check (uses word boundaries to prevent 'Spotify pinned' false positive)
+        if (target != null)
+        {
+            if (target.Role.Equals("PasswordBox", StringComparison.OrdinalIgnoreCase)
+                || target.Value == "[PASSWORD]"
+                || SensitiveFieldRegex.IsMatch(target.Label))
+            {
+                reason = $"Interacting with sensitive/password field '{target.DisplayLabel}' requires confirmation.";
+                _logger.LogInformation("Action requires confirmation (sensitive field): {Reason}", reason);
+                return true;
+            }
+        }
+
+        // 5. Inspect target element labels and decision descriptions for sensitive verbs
+        var textToInspect = new List<string>(4);
+        if (!string.IsNullOrWhiteSpace(decision.TargetLabel))
+        {
+            textToInspect.Add(decision.TargetLabel);
+        }
+        if (target != null)
+        {
+            if (!string.IsNullOrWhiteSpace(target.Label)) textToInspect.Add(target.Label);
+            if (!string.IsNullOrWhiteSpace(target.Value)) textToInspect.Add(target.Value);
+        }
+
+        foreach (var text in textToInspect)
+        {
+            var match = _sensitiveRegex.Match(text);
+            if (match.Success)
+            {
+                reason = $"Action '{decision.Operation}' on '{target?.DisplayLabel ?? decision.TargetLabel}' matches sensitive verb '{match.Value}'.";
+                _logger.LogInformation("Action requires confirmation: {Reason}", reason);
+                return true;
+            }
+        }
+
+        // 6. Typing sensitive verbs or text
+        if (_options.RequireConfirmationOnSensitiveText && decision.Operation == AgentOperation.TypeText && !string.IsNullOrWhiteSpace(decision.TextValue))
+        {
+            var textMatch = _sensitiveRegex.Match(decision.TextValue);
+            if (textMatch.Success)
+            {
+                reason = $"Typed text contains sensitive verb '{textMatch.Value}'.";
+                _logger.LogInformation("Action requires confirmation: {Reason}", reason);
+                return true;
+            }
+        }
+
         reason = string.Empty;
         return false;
     }

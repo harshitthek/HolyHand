@@ -1,4 +1,4 @@
-﻿using System.Drawing;
+using System.Drawing;
 using FluentAssertions;
 using HolyHand.Core.Agent;
 using HolyHand.Core.Interfaces;
@@ -22,11 +22,11 @@ public class MockJobPageTests
     };
 
     /// <summary>
-    /// Jarvis mode: The agent fills the form AND auto-clicks Submit without any human approval.
-    /// All safe actions execute automatically.
+    /// Guardian mode: The agent fills the form automatically, pauses for human approval before clicking Submit Application,
+    /// and proceeds once approved.
     /// </summary>
     [Fact]
-    public async Task RS07_MockJobApplication_FillsFormAndSubmits_FullyAutomatically()
+    public async Task RS07_MockJobApplication_FillsFormAndPausesForConfirmation()
     {
         var executedActions = new List<AgentDecision>();
 
@@ -66,6 +66,14 @@ public class MockJobPageTests
             .ReturnsAsync(ActionResult.SuccessResult("Executed"));
 
         var mockPrompt = new Mock<IConfirmationPrompt>();
+        mockPrompt
+            .Setup(p => p.RequestConfirmationAsync(
+                It.IsAny<AgentDecision>(),
+                It.IsAny<AccessibilityElement>(),
+                It.IsAny<AppTarget>(),
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true); // User approves Submit
 
         var riskPolicy = new RiskPolicy();
         var loop = new AgentLoop(
@@ -79,18 +87,18 @@ public class MockJobPageTests
 
         var result = await loop.RunAsync("Apply for Software Engineer job with name Alice Smith and email alice@example.com", _mockJobPage);
 
-        // Jarvis mode: ALL three actions executed without any confirmation prompt
+        // Actions executed
         executedActions.Should().Contain(a => a.Operation == AgentOperation.TypeText && a.TargetId == "e1");
         executedActions.Should().Contain(a => a.Operation == AgentOperation.TypeText && a.TargetId == "e2");
-        executedActions.Should().Contain(a => a.Operation == AgentOperation.Click && a.TargetId == "e3"); // Submit auto-executed!
+        executedActions.Should().Contain(a => a.Operation == AgentOperation.Click && a.TargetId == "e3");
 
-        // No confirmation prompt was shown for any action
+        // Confirmation prompt was shown for Submit Application
         mockPrompt.Verify(p => p.RequestConfirmationAsync(
-            It.IsAny<AgentDecision>(),
-            It.IsAny<AccessibilityElement>(),
+            It.Is<AgentDecision>(d => d.TargetId == "e3"),
+            It.Is<AccessibilityElement>(e => e.Id == "e3"),
             It.IsAny<AppTarget>(),
-            It.IsAny<string>(),
-            It.IsAny<CancellationToken>()), Times.Never);
+            It.Is<string>(r => r.Contains("Submit")),
+            It.IsAny<CancellationToken>()), Times.Once);
 
         result.Status.Should().Be(AgentRunStatus.Completed);
     }

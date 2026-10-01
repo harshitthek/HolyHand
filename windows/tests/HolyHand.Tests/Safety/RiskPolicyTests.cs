@@ -1,4 +1,4 @@
-﻿using System.Drawing;
+using System.Drawing;
 using FluentAssertions;
 using HolyHand.Core.Agent;
 using HolyHand.Core.Interfaces;
@@ -27,7 +27,7 @@ public class RiskPolicyTests
         WindowBounds = new Rectangle(0, 0, 800, 600)
     };
 
-    // RS01: Jarvis mode - NO confirmation required for any safe action labels
+    // RS01: Sensitive verbs unconditionally require human confirmation
     [Theory]
     [InlineData("Submit")]
     [InlineData("Submit Application")]
@@ -40,19 +40,9 @@ public class RiskPolicyTests
     [InlineData("Post Update")]
     [InlineData("Publish Article")]
     [InlineData("Confirm Transaction")]
-    [InlineData("Sign in to Account")]
     [InlineData("Install Package")]
-    [InlineData("Run Executable")]
     [InlineData("Transfer Funds")]
-    [InlineData("Spotify pinned")]
-    [InlineData("Search")]
-    [InlineData("Next")]
-    [InlineData("Previous")]
-    [InlineData("View Profile")]
-    [InlineData("Read More")]
-    [InlineData("Refresh Feed")]
-    [InlineData("Filter By Name")]
-    public void RS01_AllSafeActions_NeverRequireConfirmation(string label)
+    public void RS01_SensitiveVerbs_RequireConfirmation(string label)
     {
         var decision = new AgentDecision
         {
@@ -71,79 +61,77 @@ public class RiskPolicyTests
 
         bool required = _policy.RequiresConfirmation(decision, element, _sampleApp, out var reason);
 
-        // Jarvis mode: nothing requires confirmation except deletions
+        required.Should().BeTrue();
+        reason.Should().NotBeEmpty();
+    }
+
+    // RS01: Benign routine actions never require confirmation
+    [Theory]
+    [InlineData("Spotify pinned")]
+    [InlineData("Search")]
+    [InlineData("Next")]
+    [InlineData("Previous")]
+    [InlineData("View Profile")]
+    [InlineData("Read More")]
+    [InlineData("Refresh Feed")]
+    [InlineData("Filter By Name")]
+    public void RS01_BenignActions_NeverRequireConfirmation(string label)
+    {
+        var decision = new AgentDecision
+        {
+            Operation = AgentOperation.Click,
+            TargetId = "e1",
+            TargetLabel = label
+        };
+
+        var element = new AccessibilityElement
+        {
+            Id = "e1",
+            Role = "Button",
+            Label = label,
+            Enabled = true
+        };
+
+        bool required = _policy.RequiresConfirmation(decision, element, _sampleApp, out var reason);
+
         required.Should().BeFalse();
         reason.Should().BeEmpty();
     }
 
-    // RS02: Model risk escalation — even if model escalates risk to IrreversibleOrExternalEffect,
-    // Jarvis mode still auto-executes (no confirmation dialog for non-deletion actions)
+    // RS02: Model risk escalation — when model escalates risk, confirmation is required
     [Fact]
-    public async Task RS02_ModelRisk_DoesNotBlockExecution_InJarvisMode()
+    public void RS02_ModelRisk_CanEscalate_RequiresConfirmation()
     {
-        var benignDecision = new AgentDecision
+        var escalatedDecision = new AgentDecision
         {
             Operation = AgentOperation.Click,
             TargetId = "e2",
-            TargetLabel = "Export and Sync External Service"
+            TargetLabel = "Export and Sync External Service",
+            RiskScore = ActionRiskScore.IrreversibleOrExternalEffect
         };
         var benignElement = new AccessibilityElement { Id = "e2", Role = "Button", Label = "Export and Sync External Service" };
 
-        bool benignCodeRequired = _policy.RequiresConfirmation(benignDecision, benignElement, _sampleApp, out _);
-        benignCodeRequired.Should().BeFalse(); // Jarvis mode: never blocks safe actions
-
-        var mockDecisionModel = new Mock<IDecisionModel>();
-        mockDecisionModel
-            .Setup(m => m.DecideNextActionAsync(It.IsAny<string>(), It.IsAny<AppTarget>(), It.IsAny<IReadOnlyList<AccessibilityElement>>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new AgentDecision { Operation = AgentOperation.Done, TargetId = "done" });
-        mockDecisionModel
-            .Setup(m => m.VerifyCompletionAsync(It.IsAny<string>(), It.IsAny<AppTarget>(), It.IsAny<IReadOnlyList<AccessibilityElement>>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
-
-        var mockReader = new Mock<IScreenReader>();
-        mockReader
-            .Setup(r => r.ReadElementsAsync(It.IsAny<AppTarget>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<AccessibilityElement> { benignElement });
-
-        var mockExecutor = new Mock<IActionExecutor>();
-        var mockPrompt = new Mock<IConfirmationPrompt>();
-
-        var loop = new AgentLoop(
-            mockReader.Object,
-            mockDecisionModel.Object,
-            mockExecutor.Object,
-            new AgentLoopOptions { MaxSteps = 1 },
-            NullLogger<AgentLoop>.Instance,
-            _policy,
-            mockPrompt.Object);
-
-        var result = await loop.RunAsync("Sync external service", _sampleApp);
-
-        // Jarvis mode: no confirmation requested at all
-        mockPrompt.Verify(p => p.RequestConfirmationAsync(
-            It.IsAny<AgentDecision>(),
-            It.IsAny<AccessibilityElement>(),
-            It.IsAny<AppTarget>(),
-            It.IsAny<string>(),
-            It.IsAny<CancellationToken>()), Times.Never);
+        bool required = _policy.RequiresConfirmation(escalatedDecision, benignElement, _sampleApp, out var reason);
+        required.Should().BeTrue();
+        reason.Should().Contain("meets or exceeds confirmation threshold");
     }
 
-    // RS04: Safe actions are executed without any prompt
+    // RS04: Sensitive action requires confirmation; when approved, it executes
     [Fact]
-    public async Task RS04_SafeAction_ExecutedDirectly_NoPrompt()
+    public async Task RS04_SensitiveAction_RequiresConfirmation_WhenApproved_Executes()
     {
-        var safeDecision = new AgentDecision
+        var sensitiveDecision = new AgentDecision
         {
             Operation = AgentOperation.Click,
             TargetId = "e1",
             TargetLabel = "Submit Application"
         };
-        var safeEl = new AccessibilityElement { Id = "e1", Role = "Button", Label = "Submit Application" };
+        var sensitiveEl = new AccessibilityElement { Id = "e1", Role = "Button", Label = "Submit Application" };
 
         var mockReader = new Mock<IScreenReader>();
         mockReader
             .Setup(r => r.ReadElementsAsync(It.IsAny<AppTarget>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<AccessibilityElement> { safeEl });
+            .ReturnsAsync(new List<AccessibilityElement> { sensitiveEl });
 
         var mockDecisionModel = new Mock<IDecisionModel>();
         var callCount = 0;
@@ -153,7 +141,7 @@ public class RiskPolicyTests
             {
                 callCount++;
                 return callCount == 1
-                    ? safeDecision
+                    ? sensitiveDecision
                     : new AgentDecision { Operation = AgentOperation.Done };
             });
         mockDecisionModel
@@ -166,6 +154,15 @@ public class RiskPolicyTests
             .ReturnsAsync(ActionResult.SuccessResult("Executed"));
 
         var mockPrompt = new Mock<IConfirmationPrompt>();
+        mockPrompt
+            .Setup(p => p.RequestConfirmationAsync(
+                It.IsAny<AgentDecision>(),
+                It.IsAny<AccessibilityElement>(),
+                It.IsAny<AppTarget>(),
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true); // User approves
+
         var mockAuditLog = new Mock<IAuditLog>();
 
         var loop = new AgentLoop(
@@ -180,20 +177,78 @@ public class RiskPolicyTests
 
         var result = await loop.RunAsync("Fill and submit form", _sampleApp);
 
-        // Jarvis mode: executed directly with no confirmation prompt
         mockPrompt.Verify(p => p.RequestConfirmationAsync(
-            It.IsAny<AgentDecision>(),
-            It.IsAny<AccessibilityElement>(),
+            It.Is<AgentDecision>(d => d.TargetId == "e1"),
+            It.Is<AccessibilityElement>(e => e.Id == "e1"),
             It.IsAny<AppTarget>(),
             It.IsAny<string>(),
-            It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<CancellationToken>()), Times.Once);
 
-        mockExecutor.Verify(e => e.ExecuteAsync(safeDecision, safeEl, It.IsAny<CancellationToken>()), Times.Once);
+        mockExecutor.Verify(e => e.ExecuteAsync(sensitiveDecision, sensitiveEl, It.IsAny<CancellationToken>()), Times.Once);
+        mockAuditLog.Verify(a => a.LogAsync(
+            It.Is<AuditLogEntry>(e => e.DecisionType == "confirmed"),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    // RS05: Password field clicks should be auto-executed (Jarvis mode)
+    // RS04: Sensitive action requires confirmation; when rejected, execution halts
     [Fact]
-    public void RS05_PasswordField_NoConfirmationRequired_JarvisMode()
+    public async Task RS04_SensitiveAction_RequiresConfirmation_WhenRejected_HaltsExecution()
+    {
+        var sensitiveDecision = new AgentDecision
+        {
+            Operation = AgentOperation.Click,
+            TargetId = "e1",
+            TargetLabel = "Submit Application"
+        };
+        var sensitiveEl = new AccessibilityElement { Id = "e1", Role = "Button", Label = "Submit Application" };
+
+        var mockReader = new Mock<IScreenReader>();
+        mockReader
+            .Setup(r => r.ReadElementsAsync(It.IsAny<AppTarget>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<AccessibilityElement> { sensitiveEl });
+
+        var mockDecisionModel = new Mock<IDecisionModel>();
+        mockDecisionModel
+            .Setup(m => m.DecideNextActionAsync(It.IsAny<string>(), It.IsAny<AppTarget>(), It.IsAny<IReadOnlyList<AccessibilityElement>>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(sensitiveDecision);
+
+        var mockExecutor = new Mock<IActionExecutor>();
+        var mockPrompt = new Mock<IConfirmationPrompt>();
+        mockPrompt
+            .Setup(p => p.RequestConfirmationAsync(
+                It.IsAny<AgentDecision>(),
+                It.IsAny<AccessibilityElement>(),
+                It.IsAny<AppTarget>(),
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false); // User rejects
+
+        var mockAuditLog = new Mock<IAuditLog>();
+
+        var loop = new AgentLoop(
+            mockReader.Object,
+            mockDecisionModel.Object,
+            mockExecutor.Object,
+            new AgentLoopOptions { MaxSteps = 5 },
+            NullLogger<AgentLoop>.Instance,
+            _policy,
+            mockPrompt.Object,
+            mockAuditLog.Object);
+
+        var result = await loop.RunAsync("Fill and submit form", _sampleApp);
+
+        result.Status.Should().Be(AgentRunStatus.NeedsHumanInput);
+        result.Message.Should().Contain("rejected by human");
+
+        mockExecutor.Verify(e => e.ExecuteAsync(It.IsAny<AgentDecision>(), It.IsAny<AccessibilityElement>(), It.IsAny<CancellationToken>()), Times.Never);
+        mockAuditLog.Verify(a => a.LogAsync(
+            It.Is<AuditLogEntry>(e => e.DecisionType == "rejected"),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    // RS05: Password field clicks require confirmation
+    [Fact]
+    public void RS05_PasswordField_RequiresConfirmation()
     {
         var passwordDecision = new AgentDecision
         {
@@ -212,27 +267,26 @@ public class RiskPolicyTests
 
         bool required = _policy.RequiresConfirmation(passwordDecision, passwordElement, _sampleApp, out var reason);
 
-        // Jarvis mode: no confirmation even for password fields
-        required.Should().BeFalse();
-        reason.Should().BeEmpty();
+        required.Should().BeTrue();
+        reason.Should().Contain("sensitive/password field");
     }
 
-    // RS06: Sensitive typed text should NOT block execution in Jarvis mode
+    // RS06: Sensitive typed text requires confirmation
     [Fact]
-    public void RS06_SensitiveTypedText_NoConfirmation_JarvisMode()
+    public void RS06_SensitiveTypedText_RequiresConfirmation()
     {
         var typeDecision = new AgentDecision
         {
             Operation = AgentOperation.TypeText,
             TargetId = "e1",
-            TargetLabel = "Search Box",
+            TargetLabel = "Input Box",
             TextValue = "submit login transfer"
         };
 
         bool required = _policy.RequiresConfirmation(typeDecision, null, _sampleApp, out var reason);
 
-        required.Should().BeFalse();
-        reason.Should().BeEmpty();
+        required.Should().BeTrue();
+        reason.Should().Contain("Typed text contains sensitive verb");
     }
 
     [Theory]

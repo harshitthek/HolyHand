@@ -1,11 +1,34 @@
-﻿namespace HolyHand.Core.Safety;
+namespace HolyHand.Core.Safety;
 
 public class RiskPolicyOptions
 {
-    // SensitiveVerbs: empty — Jarvis mode requires no confirmation dialogs for any safe action
+    // SensitiveVerbs: actions requiring human confirmation before execution
     public static readonly IReadOnlySet<string> DefaultSensitiveVerbs = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        // Intentionally empty: zero friction for any safe action
+        // Financial & transactional
+        "pay",
+        "buy",
+        "purchase",
+        "order",
+        "checkout",
+        "transfer",
+        "subscribe",
+        "tip",
+        // Submission & publishing
+        "submit",
+        "apply",
+        "send",
+        "post",
+        "publish",
+        "confirm",
+        "file",
+        "register",
+        // System & lifecycle
+        "install",
+        "uninstall",
+        "overwrite",
+        "reboot",
+        "shutdown"
     };
 
     // ProhibitedTerms: ONLY actual deletion operations — strictly enforced
@@ -42,6 +65,7 @@ public class RiskPolicyOptions
 
     public ActionRiskScore EscalateOnRiskScore { get; set; } = ActionRiskScore.IrreversibleOrExternalEffect;
 
-    // Disabled: no confirmation prompts for any safe action
-    public bool RequireConfirmationOnSensitiveText { get; set; } = false;
+    // Enforce confirmation prompts on sensitive actions and text
+    public bool RequireConfirmationOnSensitiveText { get; set; } = true;
 }
+

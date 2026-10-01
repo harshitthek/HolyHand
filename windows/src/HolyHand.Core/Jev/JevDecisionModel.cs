@@ -78,7 +78,7 @@ public class JevDecisionModel : IDecisionModel
         var response = await _jevClient.EvaluateAsync(request, cancellationToken);
 
         // Check if goal is already completed
-        if (response.TryGetBooleanAnswer("goalAchieved", out var goalProb, out var isAchieved) && isAchieved)
+        if (response.TryGetBooleanAnswer("goalAchieved", out var goalProb, out var isAchieved) && isAchieved && goalProb >= _options.DecisionConfidenceThreshold)
         {
             return new AgentDecision
             {
@@ -93,6 +93,20 @@ public class JevDecisionModel : IDecisionModel
         {
             _logger.LogWarning("Failed to parse nextAction choice from Jev response. Asking user.");
             return new AgentDecision { Operation = AgentOperation.AskUser, Reason = "Could not parse decision" };
+        }
+
+        // Confidence gate: if top probability is below threshold, ask user
+        if (_options.DecisionConfidenceThreshold > 0 && confidence < _options.DecisionConfidenceThreshold)
+        {
+            _logger.LogInformation("Top action '{Choice}' confidence {Conf:P0} below threshold {Thresh:P0}. Asking user.",
+                chosenKey, confidence, _options.DecisionConfidenceThreshold);
+
+            return new AgentDecision
+            {
+                Operation = AgentOperation.AskUser,
+                Reason = $"Confidence {confidence:P0} is below threshold {_options.DecisionConfidenceThreshold:P0}",
+                Confidence = confidence
+            };
         }
 
         // Execute chosen action directly as decided by the Jev model
@@ -134,7 +148,7 @@ public class JevDecisionModel : IDecisionModel
         var response = await _jevClient.EvaluateAsync(request, cancellationToken);
         if (response.TryGetBooleanAnswer("done", out var prob, out var isDone))
         {
-            return isDone;
+            return isDone && prob >= _options.DecisionConfidenceThreshold;
         }
 
         return false;

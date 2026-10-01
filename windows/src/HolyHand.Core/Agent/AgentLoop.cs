@@ -1,4 +1,4 @@
-﻿using System.Text.RegularExpressions;
+using System.Text.RegularExpressions;
 using HolyHand.Core.Interfaces;
 using HolyHand.Core.Models;
 using HolyHand.Core.Safety;
@@ -268,14 +268,47 @@ public class AgentLoop
                     return AgentRunResult.Failed(step, history, actionProhibitedReason);
                 }
 
-                // 8. Safety Invariants: Jarvis mode — no confirmation dialogs except for deletion (already blocked above).
-                // Jev Call B (risk escalation) is disabled in Jarvis mode to avoid false approval dialogs.
-                // All safe actions execute automatically.
+                // 8. Safety Invariants: Deterministic Risk Policy + Human Confirmation Gate
                 var requiresConfirmation = _riskPolicy.RequiresConfirmation(decision, targetElement, currentTarget, out var riskReason);
                 if (requiresConfirmation)
                 {
-                    // This should never be reached in Jarvis mode (RequiresConfirmation always returns false)
-                    // but kept as a safety net for future policy changes.
+                    NotifyStatus($"Safety confirmation required: {riskReason}");
+
+                    bool approved = false;
+                    if (_confirmationPrompt != null)
+                    {
+                        approved = await _confirmationPrompt.RequestConfirmationAsync(
+                            decision,
+                            targetElement,
+                            currentTarget,
+                            riskReason,
+                            cancellationToken);
+                    }
+
+                    if (!approved)
+                    {
+                        _logger.LogInformation("Action '{Operation}' on '{Target}' rejected by human.",
+                            decision.Operation, targetElement?.DisplayLabel ?? decision.TargetId);
+
+                        if (_auditLog != null)
+                        {
+                            await _auditLog.LogAsync(new AuditLogEntry
+                            {
+                                Goal = goal,
+                                Operation = decision.Operation,
+                                TargetId = decision.TargetId,
+                                TargetLabel = targetElement?.DisplayLabel ?? decision.TargetLabel,
+                                TargetRole = targetElement?.DisplayRole,
+                                AppProcess = currentTarget.ProcessName,
+                                AppTitle = currentTarget.WindowTitle,
+                                DecisionType = "rejected",
+                                Reason = riskReason
+                            }, cancellationToken);
+                        }
+
+                        NotifyStatus("Action rejected. Execution halted.");
+                        return AgentRunResult.NeedsHumanInput(step, history, $"Action rejected by human: {riskReason}");
+                    }
 
                     // Approved by human
                     if (_auditLog != null)
