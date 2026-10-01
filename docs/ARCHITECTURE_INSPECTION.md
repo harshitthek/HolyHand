@@ -1,21 +1,20 @@
-# HolyHand Deep Architectural & Security Inspection Report
+# HolyHand Architecture & Systems Inspection Report
 
-> **Target Repository**: `HolyHand.git`  
-> **Inspection Date**: October 2026  
+> **Project**: HolyHand (Windows)  
+> **Status**: Baseline C# Teardown & Transition to Hybrid Architecture  
 > **Target Framework**: .NET 8 LTS (`net8.0-windows10.0.19041.0`)  
 > **Primary Platform**: Windows 10 (19041+) & Windows 11 (x64 / ARM64)
 
 ---
 
-## 1. Executive Summary & Codebase Lineage
+## 1. Executive Summary & Architectural Evolution
 
 **HolyHand** is a Windows-native desktop AI assistant designed for sub-second, multi-step task execution. Rather than relying on vision models or streaming continuous screenshots to cloud LLMs, HolyHand reads the active application's **native accessibility tree via Windows UI Automation (UIA3)**, constructs a deterministic candidate action space in C#, and uses **TypeSafe Jev** (`typesafe-ai/jev`) through the **Vercel AI Gateway** (`/v1/evaluate`) as a high-precision probabilistic classifier.
 
-### Lineage & Git Archaeology
-Inspection of commit history (`git log -p`), untracked documents (`CLAUDE.md`, `PORT_SPEC.md`, `DECISIONS.md`), and the AST knowledge graph reveals:
-- **Upstream Origin**: Originally developed for macOS under the name **HolyHand** in Swift (`AppKit`, `AXUIElement`, `ScreenCaptureKit`).
-- **Windows Port**: Ported to C# .NET 8 under the working title **HolyHand**, then rebranded as **HolyHand**.
-- **Pruning**: In commit `483fcd0` (*"chore: remove unused macOS Swift files and legacy scripts"*), all macOS Swift sources were removed, leaving an exclusively Windows-native C# codebase.
+### Evolution Path: From Monolithic C# to Hybrid Architecture
+1. **Phase 1 (Pure C# Prototype)**: HolyHand was initially engineered entirely in C# on .NET 8 LTS with FlaUI.UIA3, WPF Direct3D windowing, and Whisper.net.
+2. **Phase 2 (Architecture Audit & Inspection)**: Runtime benchmarking and stress testing revealed critical areas for improvement: hook timeout sensitivities during GC sweeps, audio buffer copying overhead, and safety policy regressions.
+3. **Phase 3 (Hybrid C# + Rust Engine)**: We adopted a hybrid design—delegating low-level system hooks, audio streaming, and hardware input to a zero-GC Rust native core, while keeping UI, agent orchestration, and COM accessibility in C#.
 
 ---
 

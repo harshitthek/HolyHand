@@ -35,16 +35,22 @@ HolyHand uses a high-performance **hybrid architecture** that eliminates runtime
 
 ---
 
-## Key Differentiators & Improvements over HolyHand
+## Architectural Evolution: From Pure C# to Hybrid Engine
 
-| Feature | HolyHand (Baseline) | HolyHand (Our Engine) |
-|---|---|---|
-| **Keyboard Hook Engine** | C# Thread (prone to GC pause timeouts) | **Pure Rust Native Engine** (Zero GC, sub-microsecond latency) |
-| **Speech Recognition** | NAudio + Whisper.net (wrapper overhead) | **Native `cpal` (WASAPI) + `whisper-rs`** statically linked in Rust |
-| **Safety Invariants** | Regressed: "Jarvis Mode" bypassed all confirmation dialogs | **Strict Guardian Mode**: Hardcoded human approval on sensitive verbs |
-| **Step Bounding** | Unbounded (`MaxSteps = 0`) | **Bounded (`MaxSteps = 25`)** + SHA-256 state-hashing loop guard |
-| **Confidence Floor** | Bypassed (executed low-confidence guesses) | **Calibrated Gating**: Automatically falls back to user on ambiguity |
-| **Secret Hygiene** | Production API key leaked in git commit tree | **Clean Git Tree** + Windows Credential Manager DPAPI isolation |
+HolyHand was originally conceived and implemented as a **100% C# on .NET 8 LTS** application:
+- **FlaUI.UIA3** for batched COM UI Automation traversal.
+- **WPF & Direct3D** for translucent acrylic windowing and system tray integration.
+- **WH_KEYBOARD_LL** Win32 keyboard hook with VK `0xE8` Start-menu suppression.
+- **Whisper.net** and `Windows.Media.Ocr` for local offline voice and OCR perception.
+
+### Why We Chose to Evolve to a Hybrid C# + Rust Approach
+While our pure C# implementation delivered exceptional UI responsiveness and COM accessibility handling, real-world runtime profiling on Windows revealed two critical systems-level challenges:
+1. **Zero-Tolerance OS Hook Timeouts**: Windows removes low-level keyboard hooks (`WH_KEYBOARD_LL`) if a callback takes longer than the OS timeout threshold (200–1000ms). Any Gen 2 garbage collection pause or thread contention on the hook thread created a slight risk of Windows silently unhooking our hotkey.
+2. **Audio Streaming Latency**: Interfacing with the Windows Audio Session API (WASAPI) through managed COM wrappers (`NAudio`) added unnecessary buffer copying and GC allocations during active microphone streaming.
+
+To eliminate these compromises, HolyHand evolved into its current **Hybrid Architecture**:
+- **Native Rust Engine (`holyhand_native.dll`)**: Takes over the low-level keyboard hook (guaranteeing 0ms GC pauses and microsecond response times), WASAPI audio capture (`cpal`), and native `whisper.cpp` inference (`whisper-rs`).
+- **Modern C# Host (`HolyHand.App`)**: Retains what C# does best — rapid UI development in WPF XAML, rich system tray management, and first-class COM UI Automation tree reading via `FlaUI.UIA3`.
 
 ---
 

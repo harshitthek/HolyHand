@@ -1,10 +1,6 @@
-.build/
+# System and editor files
 .DS_Store
-HolyHand.app/
 *.swp
-.swiftpm/
-
-.holyhand-signing-identity
 
 # Local credentials and diagnostics
 .env
