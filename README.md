@@ -66,7 +66,7 @@ To eliminate these compromises, HolyHand evolved into its current **Hybrid Archi
 
 ## Documentation Index
 
-- [HolyHand Deep Inspection Report](docs/HOLYHAND_INSPECTION.md): Complete architectural breakdown, code analysis, and security vulnerability findings of the original codebase.
+- [HolyHand Architecture Inspection Report](docs/ARCHITECTURE_INSPECTION.md): Complete architectural breakdown, code analysis, and security findings.
 - [Hybrid Architecture Specification](docs/HYBRID_ARCHITECTURE_SPEC.md): Technical interop contract, C-ABI signatures, Rust `cdylib` layout, and .NET 8 `[LibraryImport]` bindings.
 - [Safety & Security Specification](docs/SECURITY_AND_SAFETY_SPEC.md): Detailed risk taxonomy, Guardian confirmation modal, step limits, and privacy filters.
 
