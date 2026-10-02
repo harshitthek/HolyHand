@@ -26,7 +26,7 @@ public static class EnvLoader
         foreach (var baseDir in searchDirs)
         {
             var dir = new DirectoryInfo(baseDir);
-            for (int i = 0; i < 4 && dir != null; i++)
+            for (int i = 0; i < 10 && dir != null; i++)
             {
                 var candidate = Path.Combine(dir.FullName, ".env");
                 if (File.Exists(candidate))

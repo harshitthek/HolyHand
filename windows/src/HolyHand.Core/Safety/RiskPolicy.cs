@@ -96,9 +96,13 @@ public class RiskPolicy : IRiskPolicy
             return false;
         }
 
-        // 2. Pure navigation actions are harmless
+        // 2. Pure navigation and harmless system/volume/media actions never require confirmation
         if (decision.Operation is AgentOperation.ScrollDown or AgentOperation.ScrollUp
-            or AgentOperation.PressTab or AgentOperation.PressEscape)
+            or AgentOperation.PressTab or AgentOperation.PressEscape
+            or AgentOperation.CheckVolume or AgentOperation.VolumeUp or AgentOperation.VolumeDown
+            or AgentOperation.VolumeMute or AgentOperation.VolumeSet
+            or AgentOperation.MediaPlayPause or AgentOperation.MediaNext or AgentOperation.MediaPrevious
+            or AgentOperation.LockWorkstation or AgentOperation.ShowDesktop or AgentOperation.TakeScreenshot)
         {
             reason = string.Empty;
             return false;

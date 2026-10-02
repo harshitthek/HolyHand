@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using HolyHand.Core.Agent;
+using HolyHand.Core.Common;
 using HolyHand.Core.Interfaces;
 using HolyHand.Core.Jev;
 using HolyHand.Core.Models;
@@ -28,6 +29,8 @@ public class AppLauncher : IAppLauncher
         "diskpart.exe",
         "rundll32.exe"
     };
+
+    public static bool IsKnownAlias(string name) => SystemAliases.IsKnownAlias(name);
 
     public AppLauncher(ILogger<AppLauncher>? logger = null)
     {
@@ -155,6 +158,41 @@ public class AppLauncher : IAppLauncher
     private static bool ResolveLaunchCommand(string appName, out string launchCommand)
     {
         var trimmed = appName.Trim();
+
+        // 0. Known laptop aliases and specialized shortcuts
+        if (SystemAliases.Aliases.TryGetValue(trimmed, out var aliasTarget))
+        {
+            if (aliasTarget.StartsWith("ms-settings:", StringComparison.OrdinalIgnoreCase) ||
+                aliasTarget.StartsWith("shell:", StringComparison.OrdinalIgnoreCase))
+            {
+                launchCommand = aliasTarget;
+                return true;
+            }
+
+            if (TryFindStartMenuShortcut(aliasTarget, out var aliasShortcut))
+            {
+                launchCommand = aliasShortcut;
+                return true;
+            }
+
+            if (TryFindInAppPathsRegistry(aliasTarget, out var aliasAppPath))
+            {
+                launchCommand = aliasAppPath;
+                return true;
+            }
+
+            if (TryFindInProgramFiles(aliasTarget, out var aliasProgExe))
+            {
+                launchCommand = aliasProgExe;
+                return true;
+            }
+
+            if (IsSafeLaunchCommand(aliasTarget))
+            {
+                launchCommand = aliasTarget;
+                return true;
+            }
+        }
 
         // 1. Windows App Paths registry lookup (registered desktop apps)
         if (TryFindInAppPathsRegistry(trimmed, out var appPath))
@@ -416,6 +454,13 @@ public class AppLauncher : IAppLauncher
     {
         if (string.IsNullOrWhiteSpace(command)) return false;
 
+        // Allow URI schemes (ms-settings:, shell:)
+        if (command.StartsWith("ms-settings:", StringComparison.OrdinalIgnoreCase) ||
+            command.StartsWith("shell:", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
         var exeName = Path.GetFileName(command).Trim();
         if (DisallowedExecutables.Contains(exeName)) return false;
 
@@ -434,14 +479,24 @@ public class AppLauncher : IAppLauncher
 
     public static string GetExpectedProcessName(string appName, string? command)
     {
-        if (!string.IsNullOrEmpty(command) && (command.Equals("ms-settings:", StringComparison.OrdinalIgnoreCase) ||
-            appName.Contains("settings", StringComparison.OrdinalIgnoreCase)))
-        {
-            return "SystemSettings";
-        }
-
         if (!string.IsNullOrEmpty(command))
         {
+            if (command.StartsWith("ms-settings:", StringComparison.OrdinalIgnoreCase) ||
+                appName.Contains("settings", StringComparison.OrdinalIgnoreCase))
+            {
+                return "SystemSettings";
+            }
+
+            if (command.StartsWith("shell:", StringComparison.OrdinalIgnoreCase))
+            {
+                return "explorer";
+            }
+
+            if (command.Equals("wt.exe", StringComparison.OrdinalIgnoreCase))
+            {
+                return "WindowsTerminal";
+            }
+
             var fileName = Path.GetFileNameWithoutExtension(command);
             if (!string.IsNullOrEmpty(fileName))
             {

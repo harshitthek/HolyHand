@@ -74,14 +74,21 @@ public class ActionExecutor : IActionExecutor, IDisposable
         }
 
         // Live execution mode: verify foreground process matches expected target (UIPI / safety check)
-        // Exempt OpenApp and OpenUrl as they deliberately launch new processes, and volume operations as they are OS-level
+        // Exempt OpenApp and OpenUrl as they deliberately launch new processes, and volume/media/system operations as they are OS-level
         if (ExpectedProcessId.HasValue &&
             decision.Operation != AgentOperation.OpenApp &&
             decision.Operation != AgentOperation.OpenUrl &&
             decision.Operation != AgentOperation.CheckVolume &&
             decision.Operation != AgentOperation.VolumeUp &&
             decision.Operation != AgentOperation.VolumeDown &&
-            decision.Operation != AgentOperation.VolumeMute)
+            decision.Operation != AgentOperation.VolumeMute &&
+            decision.Operation != AgentOperation.VolumeSet &&
+            decision.Operation != AgentOperation.MediaPlayPause &&
+            decision.Operation != AgentOperation.MediaNext &&
+            decision.Operation != AgentOperation.MediaPrevious &&
+            decision.Operation != AgentOperation.LockWorkstation &&
+            decision.Operation != AgentOperation.ShowDesktop &&
+            decision.Operation != AgentOperation.TakeScreenshot)
         {
             uint currentPid = GetForegroundProcessId();
 
@@ -195,6 +202,40 @@ public class ActionExecutor : IActionExecutor, IDisposable
                 case AgentOperation.VolumeMute:
                     var isMuted = _audioService?.ToggleMute() ?? false;
                     return ActionResult.SuccessResult(isMuted ? "System audio muted" : "System audio unmuted");
+
+                case AgentOperation.VolumeSet:
+                    float targetVol = 50f;
+                    if (float.TryParse(decision.TextValue, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var parsedVol))
+                    {
+                        targetVol = Math.Clamp(parsedVol, 0f, 100f);
+                    }
+                    _audioService?.SetMasterVolume(targetVol);
+                    _audioService?.ShowVolumeFlyout();
+                    return ActionResult.SuccessResult($"Set system volume to {(int)Math.Round(targetVol)}%");
+
+                case AgentOperation.MediaPlayPause:
+                    InputSimulator.SendKey((VIRTUAL_KEY)0xB3); // VK_MEDIA_PLAY_PAUSE
+                    return ActionResult.SuccessResult("Toggled media play/pause");
+
+                case AgentOperation.MediaNext:
+                    InputSimulator.SendKey((VIRTUAL_KEY)0xB0); // VK_MEDIA_NEXT_TRACK
+                    return ActionResult.SuccessResult("Skipped to next media track");
+
+                case AgentOperation.MediaPrevious:
+                    InputSimulator.SendKey((VIRTUAL_KEY)0xB1); // VK_MEDIA_PREV_TRACK
+                    return ActionResult.SuccessResult("Returned to previous media track");
+
+                case AgentOperation.LockWorkstation:
+                    LockWorkStation();
+                    return ActionResult.SuccessResult("Locked workstation screen");
+
+                case AgentOperation.ShowDesktop:
+                    InputSimulator.SendChord((VIRTUAL_KEY)0x5B, (VIRTUAL_KEY)0x44); // Win + D
+                    return ActionResult.SuccessResult("Toggled desktop (Win+D)");
+
+                case AgentOperation.TakeScreenshot:
+                    InputSimulator.SendKeyChord3((VIRTUAL_KEY)0x5B, (VIRTUAL_KEY)0x10, (VIRTUAL_KEY)0x53); // Win + Shift + S
+                    return ActionResult.SuccessResult("Triggered Windows Snipping Tool (Win+Shift+S)");
 
                 case AgentOperation.ScrollDown:
                     InputSimulator.Scroll(down: true);
@@ -372,6 +413,9 @@ public class ActionExecutor : IActionExecutor, IDisposable
         }
         return currentPid;
     }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+    private static extern bool LockWorkStation();
 
     public void Dispose()
     {

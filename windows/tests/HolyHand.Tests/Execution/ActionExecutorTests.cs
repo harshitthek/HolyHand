@@ -267,5 +267,24 @@ public class ActionExecutorTests
         muteResult.Message.Should().Contain("muted");
         mockAudio.Verify(a => a.ToggleMute(), Moq.Times.Once);
     }
+
+    [Fact]
+    public async Task EX09_VolumeSet_InvokesSetMasterVolume()
+    {
+        var mockAudio = new Moq.Mock<HolyHand.Core.Interfaces.IAudioService>();
+
+        using var executor = new ActionExecutor(NullLogger<ActionExecutor>.Instance, dryRun: false, audioService: mockAudio.Object);
+
+        var setResult = await executor.ExecuteAsync(new AgentDecision
+        {
+            Operation = AgentOperation.VolumeSet,
+            TextValue = "69"
+        }, null);
+
+        setResult.Success.Should().BeTrue();
+        setResult.Message.Should().Contain("69%");
+        mockAudio.Verify(a => a.SetMasterVolume(69f), Moq.Times.Once);
+        mockAudio.Verify(a => a.ShowVolumeFlyout(), Moq.Times.Once);
+    }
 }
 

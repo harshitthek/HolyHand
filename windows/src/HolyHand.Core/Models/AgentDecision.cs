@@ -22,6 +22,13 @@ public enum AgentOperation
     VolumeUp,
     VolumeDown,
     VolumeMute,
+    VolumeSet,
+    MediaPlayPause,
+    MediaNext,
+    MediaPrevious,
+    LockWorkstation,
+    ShowDesktop,
+    TakeScreenshot,
     Done,
     Blocked,
     AskUser

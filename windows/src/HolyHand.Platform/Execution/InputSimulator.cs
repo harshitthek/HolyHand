@@ -114,6 +114,43 @@ public static class InputSimulator
         }
     }
 
+    public static unsafe void SendKeyChord3(VIRTUAL_KEY mod1, VIRTUAL_KEY mod2, VIRTUAL_KEY key)
+    {
+        var inputs = new INPUT[6];
+
+        // Mod1 down
+        inputs[0].type = INPUT_TYPE.INPUT_KEYBOARD;
+        inputs[0].Anonymous.ki.wVk = mod1;
+
+        // Mod2 down
+        inputs[1].type = INPUT_TYPE.INPUT_KEYBOARD;
+        inputs[1].Anonymous.ki.wVk = mod2;
+
+        // Key down
+        inputs[2].type = INPUT_TYPE.INPUT_KEYBOARD;
+        inputs[2].Anonymous.ki.wVk = key;
+
+        // Key up
+        inputs[3].type = INPUT_TYPE.INPUT_KEYBOARD;
+        inputs[3].Anonymous.ki.wVk = key;
+        inputs[3].Anonymous.ki.dwFlags = KEYBD_EVENT_FLAGS.KEYEVENTF_KEYUP;
+
+        // Mod2 up
+        inputs[4].type = INPUT_TYPE.INPUT_KEYBOARD;
+        inputs[4].Anonymous.ki.wVk = mod2;
+        inputs[4].Anonymous.ki.dwFlags = KEYBD_EVENT_FLAGS.KEYEVENTF_KEYUP;
+
+        // Mod1 up
+        inputs[5].type = INPUT_TYPE.INPUT_KEYBOARD;
+        inputs[5].Anonymous.ki.wVk = mod1;
+        inputs[5].Anonymous.ki.dwFlags = KEYBD_EVENT_FLAGS.KEYEVENTF_KEYUP;
+
+        fixed (INPUT* pInputs = inputs)
+        {
+            PInvoke.SendInput(6, pInputs, sizeof(INPUT));
+        }
+    }
+
     public static void SelectAllAndClear()
     {
         // Ctrl + A

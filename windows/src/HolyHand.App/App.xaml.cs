@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO;
 using System.Net.Http;
 using System.Windows;
 using HolyHand.App.Windows;
@@ -19,6 +20,7 @@ using HolyHand.Platform.Windowing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Serilog;
 
 namespace HolyHand.App;
 
@@ -28,7 +30,11 @@ public partial class App : Application
     private static EventWaitHandle? _activateEvent;
     private const string MutexName = "Global\\HolyHand_SingleInstance_Mutex_2026";
     private const string ActivateEventName = "Global\\HolyHand_Activate_Event_2026";
-    private const int NativeHotkeyId = 0x4848;
+    private const int HotkeyIdCtrlShiftSpace = 0x4848;
+    private const int HotkeyIdAltSpace = 0x4849;
+    private const int HotkeyIdCtrlAltSpace = 0x484A;
+    private const int HotkeyIdWinShiftH = 0x484B;
+    private const int HotkeyIdCtrlShiftH = 0x484C;
     private ServiceProvider? _serviceProvider;
 
     private IHotkeyService? _hotkeyService;
@@ -94,8 +100,11 @@ public partial class App : Application
             setupDialog.ShowDialog();
         }
 
+        ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
         // Pre-create windows (hidden at startup for instant display)
         _popup = new PromptPopupWindow();
+        MainWindow = _popup;
         _popup.SpeechInput = _serviceProvider.GetService<ISpeechInput>();
         _popup.TaskSubmitted += OnTaskSubmitted;
         _popup.Cancelled += OnTaskCancelled;
@@ -106,7 +115,7 @@ public partial class App : Application
         _hotkeyService.KillSwitchTriggered += OnKillSwitchTriggered;
         _hotkeyService.Start();
 
-        // Register native fallback hotkey (Ctrl + Shift + Space)
+        // Register native hotkeys: Alt + Space, Ctrl + Shift + Space, Ctrl + Alt + Space, Win + Shift + H, Ctrl + Shift + H
         try
         {
             var helper = new System.Windows.Interop.WindowInteropHelper(_popup);
@@ -114,16 +123,63 @@ public partial class App : Application
             var source = System.Windows.Interop.HwndSource.FromHwnd(helper.Handle);
             source?.AddHook(WndProc);
 
+            System.Windows.Interop.ComponentDispatcher.ThreadFilterMessage += (ref System.Windows.Interop.MSG msg, ref bool handled) =>
+            {
+                const int WM_HOTKEY = 0x0312;
+                if (msg.message == WM_HOTKEY)
+                {
+                    var id = msg.wParam.ToInt32();
+                    if (id is HotkeyIdAltSpace or HotkeyIdCtrlShiftSpace or HotkeyIdCtrlAltSpace or HotkeyIdWinShiftH or HotkeyIdCtrlShiftH)
+                    {
+                        _logger?.LogInformation("ComponentDispatcher received WM_HOTKEY with id 0x{Id:X}", id);
+                        OnHotkeyPressed(this, EventArgs.Empty);
+                        handled = true;
+                    }
+                }
+            };
+
+            const uint MOD_ALT = 0x0001;
             const uint MOD_CONTROL = 0x0002;
             const uint MOD_SHIFT = 0x0004;
+            const uint MOD_WIN = 0x0008;
             const uint MOD_NOREPEAT = 0x4000;
             const uint VK_SPACE = 0x20;
+            const uint VK_H = 0x48;
 
-            global::Windows.Win32.PInvoke.RegisterHotKey(
+            var rAltSpace = global::Windows.Win32.PInvoke.RegisterHotKey(
                 (global::Windows.Win32.Foundation.HWND)helper.Handle,
-                NativeHotkeyId,
+                HotkeyIdAltSpace,
+                (global::Windows.Win32.UI.Input.KeyboardAndMouse.HOT_KEY_MODIFIERS)(MOD_ALT | MOD_NOREPEAT),
+                VK_SPACE);
+            _logger.LogInformation("Native Hotkey Alt+Space registered: {Status}", rAltSpace.Value != 0);
+
+            var rCtrlShiftSpace = global::Windows.Win32.PInvoke.RegisterHotKey(
+                (global::Windows.Win32.Foundation.HWND)helper.Handle,
+                HotkeyIdCtrlShiftSpace,
                 (global::Windows.Win32.UI.Input.KeyboardAndMouse.HOT_KEY_MODIFIERS)(MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT),
                 VK_SPACE);
+            _logger.LogInformation("Native Hotkey Ctrl+Shift+Space registered: {Status}", rCtrlShiftSpace.Value != 0);
+
+            var rCtrlAltSpace = global::Windows.Win32.PInvoke.RegisterHotKey(
+                (global::Windows.Win32.Foundation.HWND)helper.Handle,
+                HotkeyIdCtrlAltSpace,
+                (global::Windows.Win32.UI.Input.KeyboardAndMouse.HOT_KEY_MODIFIERS)(MOD_CONTROL | MOD_ALT | MOD_NOREPEAT),
+                VK_SPACE);
+            _logger.LogInformation("Native Hotkey Ctrl+Alt+Space registered: {Status}", rCtrlAltSpace.Value != 0);
+
+            var rWinShiftH = global::Windows.Win32.PInvoke.RegisterHotKey(
+                (global::Windows.Win32.Foundation.HWND)helper.Handle,
+                HotkeyIdWinShiftH,
+                (global::Windows.Win32.UI.Input.KeyboardAndMouse.HOT_KEY_MODIFIERS)(MOD_WIN | MOD_SHIFT | MOD_NOREPEAT),
+                VK_H);
+            _logger.LogInformation("Native Hotkey Win+Shift+H registered: {Status}", rWinShiftH.Value != 0);
+
+            var rCtrlShiftH = global::Windows.Win32.PInvoke.RegisterHotKey(
+                (global::Windows.Win32.Foundation.HWND)helper.Handle,
+                HotkeyIdCtrlShiftH,
+                (global::Windows.Win32.UI.Input.KeyboardAndMouse.HOT_KEY_MODIFIERS)(MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT),
+                VK_H);
+            _logger.LogInformation("Native Hotkey Ctrl+Shift+H registered: {Status}", rCtrlShiftH.Value != 0);
         }
         catch (Exception ex)
         {
@@ -134,16 +190,21 @@ public partial class App : Application
         var initialTarget = _windowCapture?.CaptureForegroundWindow();
         _popup.ShowForTarget(initialTarget);
 
-        _logger.LogInformation("HolyHand application started. Press Ctrl+Win or Ctrl+Shift+Space to activate.");
+        _logger.LogInformation("HolyHand application started. Dynamic Island active. Press Alt+Space, Win+Shift+H, or click the island to toggle.");
     }
 
     private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
         const int WM_HOTKEY = 0x0312;
-        if (msg == WM_HOTKEY && wParam.ToInt32() == NativeHotkeyId)
+        if (msg == WM_HOTKEY)
         {
-            OnHotkeyPressed(this, EventArgs.Empty);
-            handled = true;
+            var id = wParam.ToInt32();
+            if (id is HotkeyIdAltSpace or HotkeyIdCtrlShiftSpace or HotkeyIdCtrlAltSpace or HotkeyIdWinShiftH or HotkeyIdCtrlShiftH)
+            {
+                _logger?.LogInformation("WndProc received WM_HOTKEY with id 0x{Id:X}", id);
+                OnHotkeyPressed(this, EventArgs.Empty);
+                handled = true;
+            }
         }
         return IntPtr.Zero;
     }
@@ -153,6 +214,18 @@ public partial class App : Application
         services.AddLogging(builder =>
         {
             builder.AddConsole();
+            try
+            {
+                var logDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "HolyHand");
+                Directory.CreateDirectory(logDir);
+                var logPath = Path.Combine(logDir, "holyhand.log");
+                var serilogLogger = new LoggerConfiguration()
+                    .MinimumLevel.Debug()
+                    .WriteTo.File(logPath, rollingInterval: RollingInterval.Day, shared: true)
+                    .CreateLogger();
+                builder.AddSerilog(serilogLogger);
+            }
+            catch { }
         });
 
         services.AddSingleton<ICredentialStore, CredentialStore>();
@@ -172,15 +245,25 @@ public partial class App : Application
         {
             try
             {
-                var target = _windowCapture?.CaptureForegroundWindow();
-                _logger?.LogInformation("Trigger received. Foreground target: {ProcessName} ({Title})",
-                    target?.ProcessName ?? "None", target?.WindowTitle ?? "None");
-
-                _popup?.ShowForTarget(target);
+                if (_popup != null)
+                {
+                    if (_popup.IsExpanded)
+                    {
+                        _logger?.LogInformation("Dynamic Island already expanded; collapsing to top pill.");
+                        _popup.Collapse();
+                    }
+                    else
+                    {
+                        var target = _windowCapture?.CaptureForegroundWindow();
+                        _logger?.LogInformation("Trigger received. Expanding for target: {ProcessName} ({Title})",
+                            target?.ProcessName ?? "None", target?.WindowTitle ?? "None");
+                        _popup.ShowForTarget(target);
+                    }
+                }
             }
             catch (Exception ex)
             {
-                _logger?.LogError(ex, "Error displaying popup in OnHotkeyPressed");
+                _logger?.LogError(ex, "Error toggling Dynamic Island in OnHotkeyPressed");
             }
         });
     }
@@ -330,7 +413,11 @@ public partial class App : Application
                 var helper = new System.Windows.Interop.WindowInteropHelper(_popup);
                 if (helper.Handle != IntPtr.Zero)
                 {
-                    global::Windows.Win32.PInvoke.UnregisterHotKey((global::Windows.Win32.Foundation.HWND)helper.Handle, NativeHotkeyId);
+                    global::Windows.Win32.PInvoke.UnregisterHotKey((global::Windows.Win32.Foundation.HWND)helper.Handle, HotkeyIdAltSpace);
+                    global::Windows.Win32.PInvoke.UnregisterHotKey((global::Windows.Win32.Foundation.HWND)helper.Handle, HotkeyIdCtrlShiftSpace);
+                    global::Windows.Win32.PInvoke.UnregisterHotKey((global::Windows.Win32.Foundation.HWND)helper.Handle, HotkeyIdCtrlAltSpace);
+                    global::Windows.Win32.PInvoke.UnregisterHotKey((global::Windows.Win32.Foundation.HWND)helper.Handle, HotkeyIdWinShiftH);
+                    global::Windows.Win32.PInvoke.UnregisterHotKey((global::Windows.Win32.Foundation.HWND)helper.Handle, HotkeyIdCtrlShiftH);
                 }
             }
             catch { }

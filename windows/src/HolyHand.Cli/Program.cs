@@ -366,7 +366,8 @@ public static class Program
         var ocrService = new WindowsOcrService(ocrLogger);
         using var screenReader = new UiaScreenReader(ScreenReaderOptions.Default, ocrService, readerLogger);
         var appLauncher = new AppLauncher();
-        using var actionExecutor = new ActionExecutor(execLogger, dryRun: !isLive, appLauncher: appLauncher);
+        var audioService = new HolyHand.Platform.Audio.WindowsAudioService();
+        using var actionExecutor = new ActionExecutor(execLogger, dryRun: !isLive, appLauncher: appLauncher, audioService: audioService);
 
         var loopOptions = new AgentLoopOptions
         {

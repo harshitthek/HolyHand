@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using HolyHand.Core.Agent;
+using HolyHand.Core.Common;
 using HolyHand.Core.Interfaces;
 using HolyHand.Core.Models;
 using HolyHand.Core.Safety;
@@ -256,6 +257,11 @@ public class JevDecisionModel : IDecisionModel
         bool isVolumeGoal = IsVolumeGoal(goal);
         if (isVolumeGoal)
         {
+            if (TryExtractVolumeTarget(goal, out int targetVol))
+            {
+                choices[$"volume:set:{targetVol}"] = $"Set system audio volume directly to {targetVol}%";
+            }
+
             choices["volume:check"] = "Check current system audio volume level";
             choices["volume:up"] = "Increase system audio volume";
             choices["volume:down"] = "Decrease system audio volume";
@@ -264,10 +270,38 @@ public class JevDecisionModel : IDecisionModel
             choices["open_app:ms-settings:sound"] = "Open Windows Sound Settings";
         }
 
+        // Media playback candidates
+        bool isMediaGoal = IsMediaGoal(goal);
+        if (isMediaGoal)
+        {
+            choices["media:play_pause"] = "Toggle media playback (play/pause)";
+            choices["media:next"] = "Skip to next media track or song";
+            choices["media:previous"] = "Return to previous media track or song";
+        }
+
+        // System workstation control candidates
+        bool isSystemControlGoal = IsSystemControlGoal(goal);
+        if (isSystemControlGoal)
+        {
+            if (Regex.IsMatch(goal, @"\block\b", RegexOptions.IgnoreCase))
+            {
+                choices["system:lock"] = "Lock the Windows workstation screen";
+            }
+            if (Regex.IsMatch(goal, @"\b(?:desktop|minimize|hide)\b", RegexOptions.IgnoreCase))
+            {
+                choices["system:show_desktop"] = "Show Windows desktop (minimize all windows)";
+            }
+            if (Regex.IsMatch(goal, @"\b(?:screenshot|snip|capture)\b", RegexOptions.IgnoreCase))
+            {
+                choices["system:screenshot"] = "Take a screenshot using Windows Snipping Tool";
+            }
+        }
+
         bool isPureLaunch = IsPureLaunchGoal(goal);
+        bool isSystemGoal = isVolumeGoal || isMediaGoal || isSystemControlGoal || isPureLaunch;
 
         // Only populate foreground UI elements if the task is NOT a pure system command (app launch or audio)
-        if (!isVolumeGoal && !isPureLaunch)
+        if (!isSystemGoal)
         {
             // Extract search/literal candidate phrases from user goal
             var textCandidates = ExtractCandidatePhrases(goal);
@@ -402,6 +436,18 @@ public class JevDecisionModel : IDecisionModel
             };
         }
 
+        if (key.StartsWith("volume:set:", StringComparison.OrdinalIgnoreCase))
+        {
+            var pct = key[11..].Trim();
+            return new AgentDecision
+            {
+                Operation = AgentOperation.VolumeSet,
+                TextValue = pct,
+                Confidence = confidence,
+                Reason = $"Set system audio volume to {pct}%"
+            };
+        }
+
         return key.ToLowerInvariant() switch
         {
             "press:enter" => new AgentDecision { Operation = AgentOperation.PressReturn, Confidence = confidence },
@@ -411,6 +457,12 @@ public class JevDecisionModel : IDecisionModel
             "volume:up" => new AgentDecision { Operation = AgentOperation.VolumeUp, Confidence = confidence, Reason = "Increase system volume" },
             "volume:down" => new AgentDecision { Operation = AgentOperation.VolumeDown, Confidence = confidence, Reason = "Decrease system volume" },
             "volume:mute" => new AgentDecision { Operation = AgentOperation.VolumeMute, Confidence = confidence, Reason = "Toggle system audio mute" },
+            "media:play_pause" => new AgentDecision { Operation = AgentOperation.MediaPlayPause, Confidence = confidence, Reason = "Toggle media playback" },
+            "media:next" => new AgentDecision { Operation = AgentOperation.MediaNext, Confidence = confidence, Reason = "Skip to next media track" },
+            "media:previous" => new AgentDecision { Operation = AgentOperation.MediaPrevious, Confidence = confidence, Reason = "Return to previous media track" },
+            "system:lock" => new AgentDecision { Operation = AgentOperation.LockWorkstation, Confidence = confidence, Reason = "Lock workstation screen" },
+            "system:show_desktop" => new AgentDecision { Operation = AgentOperation.ShowDesktop, Confidence = confidence, Reason = "Show Windows desktop" },
+            "system:screenshot" => new AgentDecision { Operation = AgentOperation.TakeScreenshot, Confidence = confidence, Reason = "Take screenshot" },
             "press:tab" => new AgentDecision { Operation = AgentOperation.PressTab, Confidence = confidence },
             "press:escape" => new AgentDecision { Operation = AgentOperation.PressEscape, Confidence = confidence },
             "scroll:down" => new AgentDecision { Operation = AgentOperation.ScrollDown, Confidence = confidence },
@@ -435,6 +487,59 @@ public class JevDecisionModel : IDecisionModel
         return Regex.IsMatch(goal, @"\b(?:volume|sound|audio|mute|unmute|quieter|louder)\b", RegexOptions.IgnoreCase);
     }
 
+    public static bool TryExtractVolumeTarget(string goal, out int volumePercent)
+    {
+        volumePercent = 0;
+        if (string.IsNullOrWhiteSpace(goal)) return false;
+
+        // Keywords
+        if (Regex.IsMatch(goal, @"\b(?:max|maximum|full)\s+(?:volume|sound|audio)\b|\b(?:volume|sound|audio)\s+(?:to\s+)?(?:max|maximum|full)\b", RegexOptions.IgnoreCase))
+        {
+            volumePercent = 100;
+            return true;
+        }
+
+        if (Regex.IsMatch(goal, @"\bhalf\s+(?:volume|sound|audio)\b|\b(?:volume|sound|audio)\s+(?:to\s+)?half\b", RegexOptions.IgnoreCase))
+        {
+            volumePercent = 50;
+            return true;
+        }
+
+        if (Regex.IsMatch(goal, @"\bquarter\s+(?:volume|sound|audio)\b|\b(?:volume|sound|audio)\s+(?:to\s+)?quarter\b", RegexOptions.IgnoreCase))
+        {
+            volumePercent = 25;
+            return true;
+        }
+
+        if (Regex.IsMatch(goal, @"\bzero\s+(?:volume|sound|audio)\b|\b(?:volume|sound|audio)\s+(?:to\s+)?zero\b", RegexOptions.IgnoreCase))
+        {
+            volumePercent = 0;
+            return true;
+        }
+
+        // Direct number 0-100: "set volume to 69", "volume 50", "set volume to 80%", "turn volume to 69"
+        var match = Regex.Match(goal, @"\b(\d{1,3})\s*(?:%|\s*percent)?\b");
+        if (match.Success && int.TryParse(match.Groups[1].Value, out var num) && num >= 0 && num <= 100)
+        {
+            volumePercent = num;
+            return true;
+        }
+
+        return false;
+    }
+
+    public static bool IsMediaGoal(string goal)
+    {
+        if (string.IsNullOrWhiteSpace(goal)) return false;
+        return Regex.IsMatch(goal, @"\b(?:play|pause|resume|play\s*pause|next\s+track|next\s+song|skip\s+song|skip\s+track|previous\s+song|prev\s+song|previous\s+track|stop\s+music)\b", RegexOptions.IgnoreCase);
+    }
+
+    public static bool IsSystemControlGoal(string goal)
+    {
+        if (string.IsNullOrWhiteSpace(goal)) return false;
+        return Regex.IsMatch(goal, @"\b(?:lock(?:\s+(?:screen|pc|laptop|workstation|computer))?|show\s+desktop|minimize\s+all|hide\s+all\s+windows|take\s+screenshot|screenshot|snip|screen\s+snip|capture\s+screen)\b", RegexOptions.IgnoreCase);
+    }
+
     public static bool IsPureLaunchGoal(string goal)
     {
         if (string.IsNullOrWhiteSpace(goal)) return false;
@@ -446,7 +551,12 @@ public class JevDecisionModel : IDecisionModel
             return false;
         }
 
-        return Regex.IsMatch(trimmed, @"^(?:open|launch|start|run|switch\s+to|go\s+to|focus)\s+(?:the\s+app\s+)?([a-zA-Z0-9\-_ ]+)$", RegexOptions.IgnoreCase);
+        if (Regex.IsMatch(trimmed, @"^(?:open|launch|start|run|switch\s+to|go\s+to|focus)\s+(?:the\s+app\s+)?([a-zA-Z0-9\-_ ]+)$", RegexOptions.IgnoreCase))
+        {
+            return true;
+        }
+
+        return SystemAliases.IsKnownAlias(trimmed);
     }
 
     private static bool IsClickable(string role) =>
@@ -552,6 +662,13 @@ public class JevDecisionModel : IDecisionModel
             {
                 candidates.Add(app);
             }
+        }
+
+        // 2. Direct shortcut or alias match
+        var cleaned = Regex.Replace(goal.Trim(), @"^(?:please\s+|can\s+you\s+|kindly\s+)", "", RegexOptions.IgnoreCase).TrimEnd('.', '!', '?', ' ');
+        if (SystemAliases.IsKnownAlias(cleaned))
+        {
+            candidates.Add(cleaned);
         }
 
         return candidates.ToList();
