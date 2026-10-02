@@ -62,7 +62,7 @@ public static class Program
         if (string.IsNullOrWhiteSpace(options.ApiKey))
         {
             Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine("  AI_GATEWAY_API_KEY: [NOT CONFIGURED] (Set in .env or as environment variable)");
+            Console.WriteLine("  API_KEY: [NOT CONFIGURED] (Set AI_GATEWAY_API_KEY or TYPESAFE_API_KEY in .env)");
             Console.ResetColor();
             Console.WriteLine("Cannot perform Jev evaluation without API key.");
             return 1;
@@ -72,11 +72,13 @@ public static class Program
             ? $"{options.ApiKey[..4]}...{options.ApiKey[^4..]}" 
             : "[CONFIGURED]";
         Console.ForegroundColor = ConsoleColor.Green;
-        Console.WriteLine($"  AI_GATEWAY_API_KEY: {redacted} (Loaded)");
+        Console.WriteLine($"  API Key: {redacted} (Loaded)");
         Console.ResetColor();
 
-        Console.WriteLine("\nTesting live Jev model via Vercel AI Gateway...");
-        Console.WriteLine($"  Gateway Base URL: {options.BaseUrl}");
+        var providerName = options.IsNativeTypeSafe ? "TypeSafe Native API" : "Vercel AI Gateway";
+        Console.WriteLine($"\nTesting live Jev model via {providerName}...");
+        Console.WriteLine($"  Provider: {providerName}");
+        Console.WriteLine($"  Endpoint URL: {options.BaseUrl}");
         Console.WriteLine($"  Model: {options.ModelId}");
         Console.WriteLine($"  Zero Data Retention: {options.ZeroDataRetention}");
 
@@ -89,7 +91,7 @@ public static class Program
             State = new
             {
                 system = "HolyHand Windows Diagnostic",
-                status = "Testing connectivity to Vercel AI Gateway",
+                status = $"Testing connectivity to {providerName}",
                 timestamp = DateTime.UtcNow
             },
             Questions = new Dictionary<string, QuestionDefinition>
@@ -125,7 +127,7 @@ public static class Program
 
             if (response.Usage != null)
             {
-                Console.WriteLine($"  Tokens: {response.Usage.TotalTokens} (Prompt: {response.Usage.PromptTokens}, Completion: {response.Usage.CompletionTokens})");
+                Console.WriteLine($"  Tokens: {response.Usage.EffectiveTotalTokens} (Prompt: {response.Usage.EffectivePromptTokens}, Completion: {response.Usage.EffectiveCompletionTokens})");
             }
 
             var cost = response.ProviderMetadata?.Gateway?.Cost;
@@ -134,21 +136,21 @@ public static class Program
                 Console.WriteLine($"  Cost: ${cost.Value:F6}");
             }
 
-            Console.WriteLine("\nAll diagnostic checks passed. Your API key and Gateway connection are fully verified.");
+            Console.WriteLine("\nAll diagnostic checks passed. Your API key and Jev connection are fully verified.");
             return 0;
         }
         catch (AuthException ex)
         {
             Console.ForegroundColor = ConsoleColor.Red;
             Console.WriteLine($"\n[AUTH ERROR] Authentication failed: {ex.Message}");
-            Console.WriteLine("Please double-check that your AI_GATEWAY_API_KEY in .env is valid.");
+            Console.WriteLine("Please double-check that your API key in .env is valid.");
             Console.ResetColor();
             return 1;
         }
         catch (TransientException ex)
         {
             Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine($"\n[GATEWAY ERROR] Gateway returned a transient error: {ex.Message}");
+            Console.WriteLine($"\n[ENDPOINT ERROR] Jev service returned a transient error: {ex.Message}");
             Console.ResetColor();
             return 1;
         }

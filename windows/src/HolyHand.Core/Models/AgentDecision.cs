@@ -1,3 +1,5 @@
+using HolyHand.Core.Safety;
+
 namespace HolyHand.Core.Models;
 
 public enum AgentOperation
@@ -36,4 +38,5 @@ public record AgentDecision
     public double Confidence { get; init; } = 1.0;
 
     public bool RequiresConfirmation { get; init; }
+    public ActionRiskScore RiskScore { get; init; } = ActionRiskScore.Harmless;
 }

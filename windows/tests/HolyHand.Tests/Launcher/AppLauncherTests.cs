@@ -45,10 +45,10 @@ public class AppLauncherTests
     [Fact]
     public void AL03_TryExtractUrlLaunch_ExtractsHttpAndHttpsUrls()
     {
-        bool success = _launcher.TryExtractUrlLaunch("open HolyHand to check release", out var url);
+        bool success = _launcher.TryExtractUrlLaunch("open https://github.com/harshitthek/HolyHand to check release", out var url);
 
         success.Should().BeTrue();
-        url.ToString().Should().Be("HolyHand");
+        url.ToString().Should().Be("https://github.com/harshitthek/HolyHand");
     }
 
     [Fact]

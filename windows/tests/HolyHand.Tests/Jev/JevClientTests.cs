@@ -324,4 +324,138 @@ public class JevClientTests
         decision.TargetId.Should().Be("btn1");
         decision.TargetLabel.Should().Be("Search");
     }
+
+    [Fact]
+    public async Task JV09_NativeTypeSafe_RewritesBooleanToNoul_AndSetsSystemOneUrl()
+    {
+        string? requestedUrl = null;
+        string? capturedBody = null;
+
+        var handlerMock = new Mock<HttpMessageHandler>();
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .Returns<HttpRequestMessage, CancellationToken>(async (req, _) =>
+            {
+                requestedUrl = req.RequestUri?.ToString();
+                if (req.Content != null)
+                {
+                    capturedBody = await req.Content.ReadAsStringAsync();
+                }
+
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("""
+                    {
+                        "model": "jev-1.13.0",
+                        "answers": {
+                            "done": { "type": "noul", "noul": 0.82 }
+                        },
+                        "usage": { "input_tokens": 100, "output_tokens": 20 }
+                    }
+                    """)
+                };
+            });
+
+        using var httpClient = new HttpClient(handlerMock.Object);
+        var nativeOptions = new JevOptions
+        {
+            ApiKey = "apikey_test_1234567890abcdef",
+            BaseUrl = "https://api.typesafe.ai",
+            ModelId = "typesafe-ai/jev"
+        };
+        var client = new JevClient(httpClient, nativeOptions, NullLogger<JevClient>.Instance);
+
+        var request = new EvaluateRequest
+        {
+            Model = "typesafe-ai/jev",
+            State = new { goal = "test" },
+            Questions = new Dictionary<string, QuestionDefinition>
+            {
+                ["done"] = QuestionDefinition.Boolean("Has task finished?")
+            }
+        };
+
+        var response = await client.EvaluateAsync(request);
+
+        requestedUrl.Should().Be("https://api.typesafe.ai/v1/systemone");
+        capturedBody.Should().NotBeNull();
+        capturedBody.Should().Contain("\"model\":\"jev-latest\"");
+        capturedBody.Should().Contain("\"type\":\"noul\"");
+        capturedBody.Should().NotContain("\"type\":\"boolean\"");
+
+        response.TryGetBooleanAnswer("done", out var prob, out var isTrue).Should().BeTrue();
+        prob.Should().Be(0.82);
+        isTrue.Should().BeTrue();
+        response.Usage?.EffectiveTotalTokens.Should().Be(120);
+    }
+
+    [Fact]
+    public void JV10_NativeTypeSafe_ParsesNoulAndObjectScoreProbabilities()
+    {
+        var jsonResponse = """
+        {
+            "model": "jev-1.13.0",
+            "answers": {
+                "goalDone": {
+                    "type": "noul",
+                    "noul": 0.94
+                },
+                "nextOp": {
+                    "type": "choice",
+                    "choice": "click:btn1",
+                    "confidence": 0.95,
+                    "probabilities": {
+                        "click:btn1": 0.95,
+                        "press:enter": 0.05
+                    }
+                },
+                "riskLevel": {
+                    "type": "score",
+                    "score": 0.0,
+                    "confidence": 1.0,
+                    "legend": { "0": "low", "1": "medium", "2": "high" },
+                    "probabilities": {
+                        "0": 0.95,
+                        "1": 0.04,
+                        "2": 0.01
+                    }
+                }
+            },
+            "usage": {
+                "input_tokens": 150,
+                "output_tokens": 30
+            }
+        }
+        """;
+
+        var response = JsonSerializer.Deserialize<EvaluateResponse>(jsonResponse, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        response.Should().NotBeNull();
+
+        // 1. Boolean via noul
+        response!.TryGetBooleanAnswer("goalDone", out var prob, out var isTrue).Should().BeTrue();
+        prob.Should().Be(0.94);
+        isTrue.Should().BeTrue();
+
+        // 2. Choice with confidence
+        response.TryGetChoiceAnswer("nextOp", out var choice, out var confidence, out var probs).Should().BeTrue();
+        choice.Should().Be("click:btn1");
+        confidence.Should().Be(0.95);
+        probs["click:btn1"].Should().Be(0.95);
+
+        // 3. Score with object probabilities
+        response.TryGetScoreAnswer("riskLevel", out var score, out var scoreProbs).Should().BeTrue();
+        score.Should().Be(0);
+        scoreProbs.Should().HaveCount(3);
+        scoreProbs[0].Should().Be(0.95);
+        scoreProbs[1].Should().Be(0.04);
+        scoreProbs[2].Should().Be(0.01);
+
+        // 4. Token usage
+        response.Usage?.EffectivePromptTokens.Should().Be(150);
+        response.Usage?.EffectiveCompletionTokens.Should().Be(30);
+        response.Usage?.EffectiveTotalTokens.Should().Be(180);
+    }
 }

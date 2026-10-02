@@ -36,8 +36,56 @@ public class JevClient : IJevClient
             throw new AuthException("API key is not configured. Set AI_GATEWAY_API_KEY in .env or environment.");
         }
 
-        var url = $"{_options.BaseUrl.TrimEnd('/')}/v1/evaluate";
-        var requestJson = JsonSerializer.Serialize(request, JsonOpts);
+        string url;
+        var baseTrimmed = _options.BaseUrl.TrimEnd('/');
+        if (baseTrimmed.EndsWith("/systemone", StringComparison.OrdinalIgnoreCase) ||
+            baseTrimmed.EndsWith("/evaluate", StringComparison.OrdinalIgnoreCase))
+        {
+            url = baseTrimmed;
+        }
+        else if (_options.IsNativeTypeSafe)
+        {
+            url = $"{baseTrimmed}/v1/systemone";
+        }
+        else
+        {
+            url = $"{baseTrimmed}/v1/evaluate";
+        }
+
+        var requestToSend = request;
+        if (_options.IsNativeTypeSafe)
+        {
+            var effectiveModel = string.Equals(request.Model, "typesafe-ai/jev", StringComparison.OrdinalIgnoreCase)
+                ? "jev-latest"
+                : request.Model;
+
+            var adaptedQuestions = new Dictionary<string, QuestionDefinition>(request.Questions.Count);
+            foreach (var (k, v) in request.Questions)
+            {
+                if (v.Type.Equals("boolean", StringComparison.OrdinalIgnoreCase))
+                {
+                    adaptedQuestions[k] = new QuestionDefinition
+                    {
+                        Type = "noul",
+                        Instructions = v.Instructions,
+                        Criteria = v.Criteria
+                    };
+                }
+                else
+                {
+                    adaptedQuestions[k] = v;
+                }
+            }
+
+            requestToSend = request with
+            {
+                Model = effectiveModel,
+                Questions = adaptedQuestions,
+                ProviderOptions = null
+            };
+        }
+
+        var requestJson = JsonSerializer.Serialize(requestToSend, JsonOpts);
 
         var stopwatch = Stopwatch.StartNew();
         int attempts = 0;
@@ -99,7 +147,7 @@ public class JevClient : IJevClient
                 try
                 {
                     var result = JsonSerializer.Deserialize<EvaluateResponse>(responseBody, JsonOpts)
-                        ?? throw new ProtocolException("Received null or empty evaluate response from Gateway.");
+                        ?? throw new ProtocolException("Received null or empty evaluate response from Jev endpoint.");
 
                     var cost = result.ProviderMetadata?.Gateway?.Cost;
                     var costStr = cost.HasValue ? $"${cost.Value:F6}" : "N/A";
@@ -110,7 +158,7 @@ public class JevClient : IJevClient
                 catch (JsonException ex)
                 {
                     _logger.LogError(ex, "Failed to parse evaluate response JSON: {Body}", responseBody);
-                    throw new ProtocolException($"Failed to parse Gateway response: {ex.Message}", ex);
+                    throw new ProtocolException($"Failed to parse Jev response: {ex.Message}", ex);
                 }
             }
 
@@ -119,21 +167,21 @@ public class JevClient : IJevClient
             // 401 / 403: Authentication errors — DO NOT retry
             if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
             {
-                _logger.LogError("Authentication rejected by Gateway (HTTP {StatusCode})", statusCode);
+                _logger.LogError("Authentication rejected by Jev endpoint (HTTP {StatusCode})", statusCode);
                 throw new AuthException(responseBody, statusCode);
             }
 
             // Other 4xx client errors: Bad Request, Not Found, etc. — DO NOT retry
             if (statusCode is >= 400 and < 500 and not 429)
             {
-                _logger.LogError("Client error from Gateway (HTTP {StatusCode}): {Body}", statusCode, responseBody);
+                _logger.LogError("Client error from Jev endpoint (HTTP {StatusCode}): {Body}", statusCode, responseBody);
                 throw new ProtocolException($"Client request rejected (HTTP {statusCode}): {responseBody}");
             }
 
             // 429 (Rate Limit) or 5xx (Server Error): Retry with exponential backoff + jitter
             if (attempts <= _options.MaxRetries)
             {
-                _logger.LogWarning("Transient gateway error (HTTP {StatusCode}). Retrying attempt {NextAttempt}/{MaxRetries}...",
+                _logger.LogWarning("Transient error from Jev endpoint (HTTP {StatusCode}). Retrying attempt {NextAttempt}/{MaxRetries}...",
                     statusCode, attempts + 1, _options.MaxRetries);
 
                 await BackoffDelayAsync(attempts, cancellationToken);

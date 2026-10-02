@@ -35,6 +35,12 @@ public record QuestionDefinition
         Instructions = instructions
     };
 
+    public static QuestionDefinition Noul(string instructions) => new()
+    {
+        Type = "noul",
+        Instructions = instructions
+    };
+
     public static QuestionDefinition Choice(Dictionary<string, string> criteria, string? instructions = null) => new()
     {
         Type = "choice",
@@ -86,6 +92,15 @@ public record EvaluateResponse
         if (!Answers.TryGetValue(questionName, out var element))
             return false;
 
+        // Native TypeSafe format: {"type": "noul", "noul": 0.16}
+        if (element.TryGetProperty("noul", out var noulProp) && noulProp.TryGetDouble(out var np))
+        {
+            probability = np;
+            isTrue = np >= 0.5;
+            return true;
+        }
+
+        // Vercel Gateway format: {"type": "boolean", "probability": 0.16}
         if (element.TryGetProperty("probability", out var probProp) && probProp.TryGetDouble(out var p))
         {
             probability = p;
@@ -109,6 +124,11 @@ public record EvaluateResponse
             choice = choiceProp.GetString() ?? string.Empty;
         }
 
+        if (element.TryGetProperty("confidence", out var confProp) && confProp.TryGetDouble(out var c))
+        {
+            confidence = c;
+        }
+
         if (element.TryGetProperty("probabilities", out var probsProp) && probsProp.ValueKind == JsonValueKind.Object)
         {
             foreach (var prop in probsProp.EnumerateObject())
@@ -120,7 +140,7 @@ public record EvaluateResponse
             }
         }
 
-        if (!string.IsNullOrEmpty(choice) && probabilities.TryGetValue(choice, out var topProb))
+        if (confidence == 0 && !string.IsNullOrEmpty(choice) && probabilities.TryGetValue(choice, out var topProb))
         {
             confidence = topProb;
         }
@@ -151,14 +171,29 @@ public record EvaluateResponse
             }
         }
 
-        if (element.TryGetProperty("probabilities", out var probsProp) && probsProp.ValueKind == JsonValueKind.Array)
+        if (element.TryGetProperty("probabilities", out var probsProp))
         {
-            foreach (var item in probsProp.EnumerateArray())
+            if (probsProp.ValueKind == JsonValueKind.Array)
             {
-                if (item.TryGetDouble(out var p))
+                foreach (var item in probsProp.EnumerateArray())
                 {
-                    probabilities.Add(p);
+                    if (item.TryGetDouble(out var p))
+                    {
+                        probabilities.Add(p);
+                    }
                 }
+            }
+            else if (probsProp.ValueKind == JsonValueKind.Object)
+            {
+                var dict = new SortedDictionary<int, double>();
+                foreach (var prop in probsProp.EnumerateObject())
+                {
+                    if (int.TryParse(prop.Name, out var idx) && prop.Value.TryGetDouble(out var p))
+                    {
+                        dict[idx] = p;
+                    }
+                }
+                probabilities.AddRange(dict.Values);
             }
         }
 
@@ -177,8 +212,23 @@ public record UsageInfo
     [JsonPropertyName("totalTokens")]
     public int TotalTokens { get; init; }
 
+    [JsonPropertyName("input_tokens")]
+    public int? InputTokens { get; init; }
+
+    [JsonPropertyName("output_tokens")]
+    public int? OutputTokens { get; init; }
+
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? AdditionalData { get; init; }
+
+    [JsonIgnore]
+    public int EffectivePromptTokens => PromptTokens != 0 ? PromptTokens : (InputTokens ?? 0);
+
+    [JsonIgnore]
+    public int EffectiveCompletionTokens => CompletionTokens != 0 ? CompletionTokens : (OutputTokens ?? 0);
+
+    [JsonIgnore]
+    public int EffectiveTotalTokens => TotalTokens != 0 ? TotalTokens : (EffectivePromptTokens + EffectiveCompletionTokens);
 }
 
 public record ProviderMetadataInfo

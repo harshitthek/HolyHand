@@ -114,10 +114,10 @@ public class AgentLoopTests
         UrlLauncherValidator.IsValidWebUrl("", out _).Should().BeFalse();
 
         // Extraction from natural language prompt with punctuation stripping
-        var prompt = "Please navigate to HolyHand and also check http://example.com/api.";
+        var prompt = "Please navigate to https://github.com/harshitthek/HolyHand and also check http://example.com/api.";
         var extracted = UrlLauncherValidator.ExtractWebUrls(prompt);
         extracted.Should().HaveCount(2);
-        extracted[0].ToString().Should().Be("HolyHand");
+        extracted[0].ToString().Should().Be("https://github.com/harshitthek/HolyHand");
         extracted[1].ToString().Should().Be("http://example.com/api");
     }
 
