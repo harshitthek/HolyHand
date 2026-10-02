@@ -97,4 +97,4 @@ dotnet run --project src/HolyHand.App/HolyHand.App.csproj
 
 ## License
 
-Licensed under the [MIT License](LICENSE).
+Licensed under the [Apache License, Version 2.0](LICENSE) with mandatory author attribution requirements. See the [NOTICE](NOTICE) file for attribution terms.
