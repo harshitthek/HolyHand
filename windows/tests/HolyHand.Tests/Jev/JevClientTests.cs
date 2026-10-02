@@ -276,21 +276,22 @@ public class JevClientTests
     }
 
     [Fact]
-    public async Task JV08_ExecutesTopAction_EvenWithLowConfidence_WithoutThresholdBlock()
+    public async Task JV08_ExecutesTopAction_WhenConfidenceMeetsThreshold()
     {
         var clientMock = new Mock<IJevClient>();
 
-        // Mock response with top choice having 0.45 probability across multiple choices
+        // Mock response with high confidence (0.85) meeting default 0.50 threshold
         var mockResponseJson = """
         {
             "answers": {
                 "nextAction": {
                     "type": "choice",
                     "choice": "click:btn1",
+                    "confidence": 0.85,
                     "probabilities": {
-                        "click:btn1": 0.45,
-                        "press:enter": 0.35,
-                        "done": 0.20
+                        "click:btn1": 0.85,
+                        "press:enter": 0.10,
+                        "done": 0.05
                     }
                 },
                 "goalAchieved": {
@@ -305,6 +306,7 @@ public class JevClientTests
         clientMock.Setup(c => c.EvaluateAsync(It.IsAny<EvaluateRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(mockResponse);
 
+        // Default options with Guardian safety threshold (0.50) fully active
         var model = new JevDecisionModel(clientMock.Object, _options, NullLogger<JevDecisionModel>.Instance);
 
         var target = new AppTarget
@@ -323,6 +325,58 @@ public class JevClientTests
         decision.Operation.Should().Be(AgentOperation.Click);
         decision.TargetId.Should().Be("btn1");
         decision.TargetLabel.Should().Be("Search");
+    }
+
+    [Fact]
+    public async Task JV08B_LowConfidence_BelowThreshold_EscalatesToAskUser()
+    {
+        var clientMock = new Mock<IJevClient>();
+
+        // Mock response with low confidence (0.45) below default 0.50 threshold
+        var mockResponseJson = """
+        {
+            "answers": {
+                "nextAction": {
+                    "type": "choice",
+                    "choice": "click:btn1",
+                    "confidence": 0.45,
+                    "probabilities": {
+                        "click:btn1": 0.45,
+                        "press:enter": 0.35,
+                        "done": 0.20
+                    }
+                },
+                "goalAchieved": {
+                    "type": "boolean",
+                    "probability": 0.10
+                }
+            }
+        }
+        """;
+        var mockResponse = JsonSerializer.Deserialize<EvaluateResponse>(mockResponseJson)!;
+
+        clientMock.Setup(c => c.EvaluateAsync(It.IsAny<EvaluateRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(mockResponse);
+
+        // Default options with Guardian safety threshold (0.50) fully active
+        var model = new JevDecisionModel(clientMock.Object, _options, NullLogger<JevDecisionModel>.Instance);
+
+        var target = new AppTarget
+        {
+            ProcessId = 1234,
+            ProcessName = "Notepad",
+            WindowTitle = "Untitled"
+        };
+        var elements = new List<AccessibilityElement>
+        {
+            new() { Id = "btn1", Role = "Button", Label = "Search" }
+        };
+
+        var decision = await model.DecideNextActionAsync("Search for test", target, elements, Array.Empty<string>());
+
+        decision.Operation.Should().Be(AgentOperation.AskUser);
+        decision.Reason.Should().Contain("below threshold");
+        decision.Confidence.Should().Be(0.45);
     }
 
     [Fact]
