@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using FluentAssertions;
 using HolyHand.Core.Agent;
 using HolyHand.Core.Interfaces;
@@ -24,7 +24,8 @@ public class VoiceInputTests
         using var whisperService = new WhisperSpeechService(
             fallbackService: mockFallback.Object,
             customModelDir: Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")),
-            logger: NullLogger<WhisperSpeechService>.Instance);
+            logger: NullLogger<WhisperSpeechService>.Instance,
+            audioDeviceCheck: () => false);
 
         var result = await whisperService.TranscribeAsync(CancellationToken.None);
         result.Should().Be("fallback transcript");
@@ -37,7 +38,8 @@ public class VoiceInputTests
         using var whisperService = new WhisperSpeechService(
             fallbackService: null,
             customModelDir: Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")),
-            logger: NullLogger<WhisperSpeechService>.Instance);
+            logger: NullLogger<WhisperSpeechService>.Instance,
+            audioDeviceCheck: () => false);
 
         var act = async () => await whisperService.TranscribeAsync(CancellationToken.None);
         await act.Should().ThrowAsync<InvalidOperationException>()
@@ -120,6 +122,9 @@ public class VoiceInputTests
             .ReturnsAsync("fallback result");
 
         var emptyDir = Path.Combine(Path.GetTempPath(), "holyhand_nonexistent_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(emptyDir);
+        // Write invalid model data to simulate corrupt/missing model file without triggering 75MB network download
+        await File.WriteAllTextAsync(Path.Combine(emptyDir, "ggml-tiny.bin"), "corrupted_model_content");
 
         using var whisperService = new WhisperSpeechService(
             fallbackService: fallbackRecognizer.Object,

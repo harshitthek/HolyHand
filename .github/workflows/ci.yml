@@ -19,6 +19,14 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('windows/**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
       - name: Restore dependencies
         run: dotnet restore windows/HolyHand.sln
 
@@ -26,4 +34,15 @@ jobs:
         run: dotnet build windows/HolyHand.sln -c Release --no-restore
 
       - name: Run unit tests
-        run: dotnet test windows/HolyHand.sln -c Release --no-build --logger "console;verbosity=normal"
+        run: >
+          dotnet test windows/HolyHand.sln -c Release --no-build
+          --logger "console;verbosity=normal"
+          --logger "trx;LogFileName=test-results.trx"
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: windows/tests/**/TestResults/*.trx
+          if-no-files-found: ignore

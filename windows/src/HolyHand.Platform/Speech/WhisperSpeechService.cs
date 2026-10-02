@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Net.Http;
 using System.Text;
 using HolyHand.Core.Interfaces;
@@ -19,6 +19,7 @@ public class WhisperSpeechService : ISpeechInput
 {
     private readonly ILogger<WhisperSpeechService> _logger;
     private readonly ISpeechInput? _fallbackService;
+    private readonly Func<bool>? _audioDeviceCheck;
     private readonly string _modelsDir;
     private readonly string _modelPath;
     private WhisperFactory? _factory;
@@ -38,10 +39,12 @@ public class WhisperSpeechService : ISpeechInput
     public WhisperSpeechService(
         ISpeechInput? fallbackService = null,
         string? customModelDir = null,
-        ILogger<WhisperSpeechService>? logger = null)
+        ILogger<WhisperSpeechService>? logger = null,
+        Func<bool>? audioDeviceCheck = null)
     {
         _fallbackService = fallbackService;
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<WhisperSpeechService>.Instance;
+        _audioDeviceCheck = audioDeviceCheck;
 
         _modelsDir = customModelDir ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -54,22 +57,29 @@ public class WhisperSpeechService : ISpeechInput
     {
         // 1. Check if any microphone / audio recording device is available
         bool hasDevice = false;
-        try
+        if (_audioDeviceCheck != null)
         {
-            if (WaveInEvent.DeviceCount > 0)
-            {
-                hasDevice = true;
-            }
-            else
-            {
-                using var enumerator = new MMDeviceEnumerator();
-                var endpoints = enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active);
-                hasDevice = endpoints.Count > 0;
-            }
+            hasDevice = _audioDeviceCheck();
         }
-        catch
+        else
         {
-            hasDevice = WaveInEvent.DeviceCount > 0;
+            try
+            {
+                if (WaveInEvent.DeviceCount > 0)
+                {
+                    hasDevice = true;
+                }
+                else
+                {
+                    using var enumerator = new MMDeviceEnumerator();
+                    var endpoints = enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active);
+                    hasDevice = endpoints.Count > 0;
+                }
+            }
+            catch
+            {
+                hasDevice = WaveInEvent.DeviceCount > 0;
+            }
         }
 
         if (!hasDevice)
@@ -224,7 +234,8 @@ public class WhisperSpeechService : ISpeechInput
 
             if (captureFormat.SampleRate == 16000 && captureFormat.BitsPerSample == 16 && captureFormat.Channels == 1)
             {
-                using var writer = new WaveFileWriter(wavStream, targetWaveFormat);
+                using var nonClosing = new NonClosingStreamWrapper(wavStream);
+                using var writer = new WaveFileWriter(nonClosing, targetWaveFormat);
                 writer.Write(rawBytes, 0, rawBytes.Length);
                 writer.Flush();
             }
@@ -237,24 +248,25 @@ public class WhisperSpeechService : ISpeechInput
                 {
                     ResamplerQuality = 60
                 };
-                WaveFileWriter.WriteWavFileToStream(wavStream, resampler);
+                using var nonClosing = new NonClosingStreamWrapper(wavStream);
+                WaveFileWriter.WriteWavFileToStream(nonClosing, resampler);
             }
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Audio resampling failed, falling back to direct PCM header write.");
             wavStream.SetLength(0);
-            using var writer = new WaveFileWriter(wavStream, targetWaveFormat);
+            using var nonClosing = new NonClosingStreamWrapper(wavStream);
+            using var writer = new WaveFileWriter(nonClosing, targetWaveFormat);
             var pcmBytes = audioStream.ToArray();
             writer.Write(pcmBytes, 0, pcmBytes.Length);
             writer.Flush();
         }
 
-        wavStream.Position = 0;
-
         // 6. Transcribe with local Whisper
         try
         {
+            wavStream.Position = 0;
             _logger.LogInformation("Transcribing {Length} bytes of audio with Whisper...", wavStream.Length);
             var sb = new StringBuilder();
 
@@ -400,6 +412,34 @@ public class WhisperSpeechService : ISpeechInput
             _factory?.Dispose();
             _initLock.Dispose();
             _fallbackService?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Stream wrapper that prevents NAudio's WaveFileWriter from closing the underlying stream upon disposal.
+    /// </summary>
+    private sealed class NonClosingStreamWrapper : Stream
+    {
+        private readonly Stream _stream;
+
+        public NonClosingStreamWrapper(Stream stream) => _stream = stream;
+
+        public override bool CanRead => _stream.CanRead;
+        public override bool CanSeek => _stream.CanSeek;
+        public override bool CanWrite => _stream.CanWrite;
+        public override long Length => _stream.Length;
+        public override long Position { get => _stream.Position; set => _stream.Position = value; }
+
+        public override void Flush() => _stream.Flush();
+        public override int Read(byte[] buffer, int offset, int count) => _stream.Read(buffer, offset, count);
+        public override long Seek(long offset, SeekOrigin origin) => _stream.Seek(offset, origin);
+        public override void SetLength(long value) => _stream.SetLength(value);
+        public override void Write(byte[] buffer, int offset, int count) => _stream.Write(buffer, offset, count);
+
+        protected override void Dispose(bool disposing)
+        {
+            // Do not dispose the underlying stream; flush only
+            _stream.Flush();
         }
     }
 }
