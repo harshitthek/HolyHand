@@ -234,4 +234,38 @@ public class ActionExecutorTests
         threadEx.Should().BeNull();
         clickCount.Should().Be(1);
     }
+
+    [Fact]
+    public async Task EX08_VolumeOperations_InvokeAudioService()
+    {
+        var mockAudio = new Moq.Mock<HolyHand.Core.Interfaces.IAudioService>();
+        mockAudio.Setup(a => a.GetMasterVolume()).Returns((65f, false));
+        mockAudio.Setup(a => a.ToggleMute()).Returns(true);
+
+        using var executor = new ActionExecutor(NullLogger<ActionExecutor>.Instance, dryRun: false, audioService: mockAudio.Object);
+
+        // CheckVolume
+        var checkResult = await executor.ExecuteAsync(new AgentDecision { Operation = AgentOperation.CheckVolume }, null);
+        checkResult.Success.Should().BeTrue();
+        checkResult.Message.Should().Contain("65%");
+        checkResult.Message.Should().Contain("Unmuted");
+        mockAudio.Verify(a => a.ShowVolumeFlyout(), Moq.Times.Once);
+
+        // VolumeUp
+        var upResult = await executor.ExecuteAsync(new AgentDecision { Operation = AgentOperation.VolumeUp }, null);
+        upResult.Success.Should().BeTrue();
+        mockAudio.Verify(a => a.AdjustVolume(5f), Moq.Times.Once);
+
+        // VolumeDown
+        var downResult = await executor.ExecuteAsync(new AgentDecision { Operation = AgentOperation.VolumeDown }, null);
+        downResult.Success.Should().BeTrue();
+        mockAudio.Verify(a => a.AdjustVolume(-5f), Moq.Times.Once);
+
+        // VolumeMute
+        var muteResult = await executor.ExecuteAsync(new AgentDecision { Operation = AgentOperation.VolumeMute }, null);
+        muteResult.Success.Should().BeTrue();
+        muteResult.Message.Should().Contain("muted");
+        mockAudio.Verify(a => a.ToggleMute(), Moq.Times.Once);
+    }
 }
+

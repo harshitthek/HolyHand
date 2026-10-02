@@ -1,100 +1,140 @@
-# HolyHand (Windows)
+# HolyHand
 
-> A blazing-fast, safe, Windows-native AI desktop assistant. Focus an app, press **Ctrl + Win**, and let it take the wheel with strict human oversight.
+> A Windows-native AI desktop assistant with real-time UI automation, offline perception, and strict human-in-the-loop safety.
 
-HolyHand reads accessible UI controls via Windows UI Automation, selects the optimal actions using the **TypeSafe Jev** decision engine via **Vercel AI Gateway**, types, clicks, and verifies the outcome in real time.
+HolyHand connects AI decision intelligence directly to your desktop. Focus any application, summon HolyHand via the top-docked Dynamic Island, and let it inspect controls, calculate low-risk actions, and execute tasks across your system with verifiable safety guardrails.
 
 ---
 
-## Architecture: Hybrid C# + Rust
+## Overview
 
-HolyHand uses a high-performance **hybrid architecture** that eliminates runtime compromises:
+HolyHand is built natively for Windows 10 and 11 on **.NET 8 LTS**, leveraging deep OS accessibility APIs and local neural perceptual models:
+
+- **Dynamic Island Overlay**: A sleek, top-docked capsule interface inspired by modern Wayland and dynamic notification surfaces.
+- **Dual Hotkey Activation**:
+  - **`Ctrl` + `Win`**: Zero-latency low-level modifier chord with Windows Start Menu suppression (`VK 0xE8`).
+  - **`Ctrl` + `Shift` + `Space`**: Native Win32 `RegisterHotKey` fallback.
+- **COM UI Automation**: High-throughput accessibility tree reading via `FlaUI.UIA3` with batched COM `CacheRequest` traversal.
+- **Offline Perception**: Local speech recognition via `Whisper.net` and OCR text detection via `Windows.Media.Ocr`.
+- **TypeSafe Decision Engine**: Integration with calibrated decision models (`Jev`) via AI Gateway for deterministic, low-risk action selection.
+- **Guardian Safety Subsystem**: Automatic risk scoring ($0.50$ escalation threshold), password and token redaction, and an unbypassable modal confirmation gate for irreversible operations.
+
+---
+
+## Architectural Architecture
 
 ```
 ┌────────────────────────────────────────────────────────┐
-│             HolyHand.App (C# on .NET 8 LTS)            │
-│  - Modern WPF Direct3D Acrylic Floating Popup          │
-│  - System Tray Integration & Notification Hooks        │
-│  - FlaUI.UIA3 COM UI Automation with CacheRequest      │
-│  - Windows.Media.Ocr Local WinRT Fallback              │
-│  - Guardian Human-in-the-Loop Safety Gates             │
+│             HolyHand.App (.NET 8 LTS / WPF)            │
+│  - Top-Docked Dynamic Island UI (Glassmorphic Capsule) │
+│  - Single-Instance Activation & Event Signaling        │
+│  - Native Win32 RegisterHotKey & IPC Event Dispatcher  │
+│  - Guardian Human-in-the-Loop Modal Approval Gate      │
 └───────────────────────────▲────────────────────────────┘
                             │
-              In-Process C-ABI / [LibraryImport]
-              (Zero IPC Overhead, Zero Latency)
+┌───────────────────────────▼────────────────────────────┐
+│         HolyHand.Platform (Win32 & OS Integration)     │
+│  - Low-Level Keyboard Hook (WH_KEYBOARD_LL)            │
+│  - Start Menu Dummy Tap Suppression (VK 0xE8)          │
+│  - FlaUI.UIA3 Accessibility Tree Inspector             │
+│  - Windows.Media.Ocr Text Perception Service           │
+│  - Whisper.net Local Offline Speech-to-Text            │
+│  - Input Simulation & Window Capture Pipeline          │
+└───────────────────────────▲────────────────────────────┘
                             │
 ┌───────────────────────────▼────────────────────────────┐
-│          holyhand_native.dll (Native Rust `cdylib`)    │
-│  - Low-Level Keyboard Hook (WH_KEYBOARD_LL)            │
-│  - Zero GC Pauses, Zero OS Hook Timeouts               │
-│  - Windows Start-Menu Suppression (VK 0xE8)            │
-│  - Offline Whisper.cpp Speech Recognition (cpal/WASAPI)│
-│  - Hardware Input Simulation (SendInput)               │
+│           HolyHand.Core (Domain & Safety Policy)       │
+│  - ChordStateMachine Pure State Transition Model       │
+│  - Risk Policy & Irreversible Verb Classifier          │
+│  - Secret Sanitizer (Tokens, Keys, Credentials)        │
+│  - Agent Loop, Stalling Detector, Audit Logger         │
 └────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Architectural Evolution: From Pure C# to Hybrid Engine
+## Roadmap: Future Phase Hybrid Rust Engine
 
-HolyHand was originally conceived and implemented as a **100% C# on .NET 8 LTS** application:
-- **FlaUI.UIA3** for batched COM UI Automation traversal.
-- **WPF & Direct3D** for translucent acrylic windowing and system tray integration.
-- **WH_KEYBOARD_LL** Win32 keyboard hook with VK `0xE8` Start-menu suppression.
-- **Whisper.net** and `Windows.Media.Ocr` for local offline voice and OCR perception.
+While HolyHand's current production runtime is 100% C# on .NET 8 LTS, a planned **Phase 2 Hybrid Engine** is on the architectural roadmap:
 
-### Why We Chose to Evolve to a Hybrid C# + Rust Approach
-While our pure C# implementation delivered exceptional UI responsiveness and COM accessibility handling, real-world runtime profiling on Windows revealed two critical systems-level challenges:
-1. **Zero-Tolerance OS Hook Timeouts**: Windows removes low-level keyboard hooks (`WH_KEYBOARD_LL`) if a callback takes longer than the OS timeout threshold (200–1000ms). Any Gen 2 garbage collection pause or thread contention on the hook thread created a slight risk of Windows silently unhooking our hotkey.
-2. **Audio Streaming Latency**: Interfacing with the Windows Audio Session API (WASAPI) through managed COM wrappers (`NAudio`) added unnecessary buffer copying and GC allocations during active microphone streaming.
+```
+Future Phase:
+┌─────────────────────────┐          C-ABI          ┌─────────────────────────┐
+│     HolyHand.App        │ ◄─────────────────────► │   holyhand_native.dll   │
+│   (C# / WPF Frontend)   │    [LibraryImport]      │    (Native Rust cdylib) │
+└─────────────────────────┘                         └─────────────────────────┘
+  - Dynamic Island UI                                 - Zero-pause kernel hook
+  - UIA3 Accessibility Tree                           - cpal WASAPI low-latency
+  - Policy & Gateway Client                           - whisper-rs inference
+```
 
-To eliminate these compromises, HolyHand evolved into its current **Hybrid Architecture**:
-- **Native Rust Engine (`holyhand_native.dll`)**: Takes over the low-level keyboard hook (guaranteeing 0ms GC pauses and microsecond response times), WASAPI audio capture (`cpal`), and native `whisper.cpp` inference (`whisper-rs`).
-- **Modern C# Host (`HolyHand.App`)**: Retains what C# does best — rapid UI development in WPF XAML, rich system tray management, and first-class COM UI Automation tree reading via `FlaUI.UIA3`.
-
----
-
-## Safety Invariants (Non-Negotiable)
-
-1. **Human Confirmation for Irreversible Steps**: Any action involving sensitive verbs (*Submit, Apply, Send, Pay, Buy, Transfer, Post, Install, Run, Confirm*) unconditionally halts execution and displays the modal approval dialog.
-2. **Hard Deletion Prohibition**: Tasks or actions attempting data destruction (*Delete, Erase, Wipe, Destroy, Truncate, Format*) are hard-blocked at the policy layer.
-3. **On-Screen Secret Redaction**: Passwords (`IsPassword=true`), credit card numbers, API keys (`vck_*`, `sk-*`, `ghp_*`), and authorization tokens are scrubbed before model submission or audit logging.
-4. **App Deny-List**: Password managers (1Password, Bitwarden, KeePass, etc.) and admin security utilities are strictly blocked from automation.
-5. **Instant Kill Switch**: Pressing **Ctrl + Win** again or pressing **Esc** aborts active runs immediately within $<1\text{ms}$.
+- **Objective**: Move the low-level `WH_KEYBOARD_LL` hook and the raw WASAPI audio streaming loop into an in-process native Rust dynamic library (`holyhand_native.dll`).
+- **Motivation**: Guarantees sub-millisecond hook responsiveness immune to GC pause jitter, eliminating Windows OS hook timeout drops (`LowLevelHooksTimeout`).
 
 ---
 
-## Documentation Index
+## Safety Invariants
 
-- [HolyHand Architecture Inspection Report](docs/ARCHITECTURE_INSPECTION.md): Complete architectural breakdown, code analysis, and security findings.
-- [Hybrid Architecture Specification](docs/HYBRID_ARCHITECTURE_SPEC.md): Technical interop contract, C-ABI signatures, Rust `cdylib` layout, and .NET 8 `[LibraryImport]` bindings.
-- [Safety & Security Specification](docs/SECURITY_AND_SAFETY_SPEC.md): Detailed risk taxonomy, Guardian confirmation modal, step limits, and privacy filters.
+HolyHand enforces non-negotiable safety constraints on all automated interactions:
+
+1. **Human Confirmation on Irreversible Verbs**: Any action attempting sensitive operations (*Submit, Apply, Send, Pay, Buy, Transfer, Post, Install, Run, Confirm*) halts the execution loop and displays an explicit modal approval dialog.
+2. **Hard Deletion Prohibition**: Tasks targeting destructive actions (*Delete, Erase, Wipe, Destroy, Truncate, Format*) are blocked unconditionally at the policy layer.
+3. **Secret Redaction**: Password fields (`IsPassword=true`), API tokens (`sk-*`, `ghp_*`, `vck_*`), and authentication cookies are redacted prior to decision model evaluation and audit logging.
+4. **Target Deny-List**: Security-sensitive software (e.g. 1Password, Bitwarden, KeePass, Windows Security) is completely excluded from automation.
+5. **Instant Kill Switch**: Pressing **Esc** or repeating the activation chord aborts execution immediately within $<1\text{ms}$.
 
 ---
 
-## Building from Source
+## Getting Started
 
 ### Prerequisites
-- Windows 10 (build 19041+) or Windows 11 (x64 or ARM64)
+
+- Windows 10 (Build 19041+) or Windows 11 (x64 / ARM64)
 - [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
-- [Rust Toolchain (MSVC target)](https://rustup.rs/)
+- Visual Studio 2022 or VS Code with C# Dev Kit (optional)
 
 ### Build & Run
+
 ```powershell
-# 1. Build the Rust Native Engine
-cd rust/holyhand_native
-cargo build --release
+# 1. Clone the repository
+git clone https://github.com/harshitthek/HolyHand.git
+cd HolyHand
 
-# 2. Stage the native DLL
-Copy-Item target/release/holyhand_native.dll ../../windows/src/HolyHand.App/ -Force
+# 2. Build the solution in Release configuration
+dotnet build windows/src/HolyHand.App/HolyHand.App.csproj -c Release
 
-# 3. Build & Run the C# Application
-cd ../../windows
-dotnet run --project src/HolyHand.App/HolyHand.App.csproj
+# 3. Launch the application
+dotnet run --project windows/src/HolyHand.App/HolyHand.App.csproj -c Release
+```
+
+### Running Tests
+
+HolyHand includes comprehensive unit test suites covering the chord state machine, risk scoring, element ranker, secret sanitization, and loop guards:
+
+```powershell
+dotnet test windows/tests/HolyHand.Tests/HolyHand.Tests.csproj -c Release
 ```
 
 ---
 
-## License
+## Usage
 
-Licensed under the [Apache License, Version 2.0](LICENSE) with mandatory author attribution requirements. See the [NOTICE](NOTICE) file for attribution terms.
+1. **Summon HolyHand**:
+   - Press **`Ctrl` + `Win`** (press both and release), OR
+   - Press **`Ctrl` + `Shift` + `Space`**.
+2. **Enter Your Task**:
+   - Type your task in the Dynamic Island prompt (e.g. `search for Adele on youtube`, `open notepad and write hello world`, `check system volume`).
+   - Or click **🎤 Mic** for push-to-talk offline transcription.
+3. **Execute**:
+   - Press **Enter** or click **Run ↵**.
+4. **Dismiss or Cancel**:
+   - Press **Esc** to dismiss the island or cancel an active task.
+
+---
+
+## License & Attribution
+
+Licensed under the [Apache License, Version 2.0](LICENSE).
+Copyright (c) 2026 harshitthek. All rights reserved.
+
+Pursuant to Section 4(d) of the Apache 2.0 License, author attribution and copyright notices must be retained in all distributions and derivative works. See the [NOTICE](NOTICE) file for formal attribution details.

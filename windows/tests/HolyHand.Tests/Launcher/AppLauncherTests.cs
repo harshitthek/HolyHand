@@ -118,8 +118,8 @@ public class AppLauncherTests
             new AgentLoopOptions { MaxSteps = 5, DryRun = false },
             Microsoft.Extensions.Logging.Abstractions.NullLogger<AgentLoop>.Instance);
 
-        // Act
-        var result = await loop.RunAsync("open settings", initialTarget);
+        // Act - compound goal ensures multi-step loop runs to step 2 after target transition
+        var result = await loop.RunAsync("open settings and configure display", initialTarget);
 
         // Assert: Jev decided OpenApp, then Jev decided Done
         result.Status.Should().Be(AgentRunStatus.Completed);

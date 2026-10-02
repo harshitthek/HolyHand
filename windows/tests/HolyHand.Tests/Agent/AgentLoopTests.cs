@@ -152,4 +152,67 @@ public class AgentLoopTests
         result.Message.Should().Contain("Foreground process changed mid-action");
         result.StepsCompleted.Should().Be(1);
     }
+
+    [Fact]
+    public async Task EX09_PureAppLaunch_CompletesImmediatelyAfterLaunch()
+    {
+        var screenReaderMock = new Mock<IScreenReader>();
+        var decisionModelMock = new Mock<IDecisionModel>();
+        var actionExecutorMock = new Mock<IActionExecutor>();
+
+        screenReaderMock.Setup(r => r.ReadElementsAsync(It.IsAny<AppTarget>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<AccessibilityElement>());
+
+        decisionModelMock.Setup(d => d.DecideNextActionAsync(
+                It.IsAny<string>(), It.IsAny<AppTarget>(), It.IsAny<IReadOnlyList<AccessibilityElement>>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AgentDecision { Operation = AgentOperation.OpenApp, TargetId = "fx sound" });
+
+        var newTarget = new AppTarget { ProcessId = 5678, ProcessName = "FxSound", WindowTitle = "FxSound" };
+        actionExecutorMock.Setup(a => a.ExecuteAsync(It.IsAny<AgentDecision>(), It.IsAny<AccessibilityElement>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ActionResult.TargetChanged(newTarget, "Launched application 'fx sound'"));
+
+        var loop = new AgentLoop(
+            screenReaderMock.Object,
+            decisionModelMock.Object,
+            actionExecutorMock.Object,
+            new AgentLoopOptions { MaxSteps = 5, DryRun = false },
+            NullLogger<AgentLoop>.Instance);
+
+        var result = await loop.RunAsync("open fx sound", _testTarget);
+
+        result.Status.Should().Be(AgentRunStatus.Completed);
+        result.StepsCompleted.Should().Be(1);
+        result.Message.Should().Be("Launched application 'fx sound'");
+    }
+
+    [Fact]
+    public async Task EX10_VolumeOperation_CompletesImmediately()
+    {
+        var screenReaderMock = new Mock<IScreenReader>();
+        var decisionModelMock = new Mock<IDecisionModel>();
+        var actionExecutorMock = new Mock<IActionExecutor>();
+
+        screenReaderMock.Setup(r => r.ReadElementsAsync(It.IsAny<AppTarget>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<AccessibilityElement>());
+
+        decisionModelMock.Setup(d => d.DecideNextActionAsync(
+                It.IsAny<string>(), It.IsAny<AppTarget>(), It.IsAny<IReadOnlyList<AccessibilityElement>>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AgentDecision { Operation = AgentOperation.CheckVolume, Confidence = 0.95 });
+
+        actionExecutorMock.Setup(a => a.ExecuteAsync(It.IsAny<AgentDecision>(), It.IsAny<AccessibilityElement>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ActionResult.SuccessResult("Volume: 46% (Unmuted)"));
+
+        var loop = new AgentLoop(
+            screenReaderMock.Object,
+            decisionModelMock.Object,
+            actionExecutorMock.Object,
+            new AgentLoopOptions { MaxSteps = 5, DryRun = false },
+            NullLogger<AgentLoop>.Instance);
+
+        var result = await loop.RunAsync("check system volume", _testTarget);
+
+        result.Status.Should().Be(AgentRunStatus.Completed);
+        result.StepsCompleted.Should().Be(1);
+        result.Message.Should().Be("Volume: 46% (Unmuted)");
+    }
 }

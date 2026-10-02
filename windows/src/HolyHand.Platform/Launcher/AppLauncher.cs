@@ -170,14 +170,21 @@ public class AppLauncher : IAppLauncher
             return true;
         }
 
-        // 3. URI scheme or protocol (e.g. ms-settings:, calculator:, spotify:)
+        // 3. Program Files & LocalAppData installed executables
+        if (TryFindInProgramFiles(trimmed, out var progExePath))
+        {
+            launchCommand = progExePath;
+            return true;
+        }
+
+        // 4. URI scheme or protocol (e.g. ms-settings:, calculator:, spotify:)
         if (trimmed.EndsWith(':') || (trimmed.Contains(':') && !trimmed.Contains('\\') && !trimmed.Contains('/')))
         {
             launchCommand = trimmed;
             return true;
         }
 
-        // 4. Native Windows shell executable fallback (system binaries in PATH: notepad, calc, explorer, etc.)
+        // 5. Native Windows shell executable fallback (system binaries in PATH: notepad, calc, explorer, etc.)
         if (IsSafeLaunchCommand(trimmed))
         {
             launchCommand = trimmed;
@@ -191,7 +198,16 @@ public class AppLauncher : IAppLauncher
     private static bool TryFindInAppPathsRegistry(string appName, out string path)
     {
         path = string.Empty;
-        var exeName = appName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? appName : appName + ".exe";
+        var trimmed = appName.Trim();
+        var compact = System.Text.RegularExpressions.Regex.Replace(trimmed, @"[\s\-_]+", "");
+        var namesToTry = new List<string>
+        {
+            trimmed.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? trimmed : trimmed + ".exe"
+        };
+        if (!string.IsNullOrEmpty(compact) && !compact.Equals(trimmed, StringComparison.OrdinalIgnoreCase))
+        {
+            namesToTry.Add(compact.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? compact : compact + ".exe");
+        }
 
         string[] baseKeys = [
             @"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths",
@@ -200,37 +216,40 @@ public class AppLauncher : IAppLauncher
 
         foreach (var baseKey in baseKeys)
         {
-            try
+            foreach (var exeName in namesToTry)
             {
-                using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey($@"{baseKey}\{exeName}");
-                var val = key?.GetValue(null)?.ToString();
-                if (!string.IsNullOrEmpty(val))
+                try
                 {
-                    val = val.Trim('"', ' ');
-                    if (File.Exists(val))
+                    using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey($@"{baseKey}\{exeName}");
+                    var val = key?.GetValue(null)?.ToString();
+                    if (!string.IsNullOrEmpty(val))
                     {
-                        path = val;
-                        return true;
+                        val = val.Trim('"', ' ');
+                        if (File.Exists(val))
+                        {
+                            path = val;
+                            return true;
+                        }
                     }
                 }
-            }
-            catch { }
+                catch { }
 
-            try
-            {
-                using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey($@"{baseKey}\{exeName}");
-                var val = key?.GetValue(null)?.ToString();
-                if (!string.IsNullOrEmpty(val))
+                try
                 {
-                    val = val.Trim('"', ' ');
-                    if (File.Exists(val))
+                    using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey($@"{baseKey}\{exeName}");
+                    var val = key?.GetValue(null)?.ToString();
+                    if (!string.IsNullOrEmpty(val))
                     {
-                        path = val;
-                        return true;
+                        val = val.Trim('"', ' ');
+                        if (File.Exists(val))
+                        {
+                            path = val;
+                            return true;
+                        }
                     }
                 }
+                catch { }
             }
-            catch { }
         }
 
         return false;
@@ -240,6 +259,7 @@ public class AppLauncher : IAppLauncher
     {
         shortcutPath = string.Empty;
         var searchToken = appName.Trim().ToLowerInvariant();
+        var normalizedSearch = System.Text.RegularExpressions.Regex.Replace(searchToken, @"[\s\-_]+", "");
 
         var directories = new List<string>();
         var commonStart = Environment.GetFolderPath(Environment.SpecialFolder.CommonStartMenu);
@@ -255,7 +275,7 @@ public class AppLauncher : IAppLauncher
             try
             {
                 var lnkFiles = Directory.EnumerateFiles(dir, "*.lnk", SearchOption.AllDirectories);
-                // Exact match first
+                // 1. Exact match first
                 foreach (var file in lnkFiles)
                 {
                     var nameWithoutExt = Path.GetFileNameWithoutExtension(file);
@@ -266,14 +286,74 @@ public class AppLauncher : IAppLauncher
                     }
                 }
 
-                // Substring match
+                // 2. Normalized match (ignores spaces, hyphens: "fx sound" matches "FxSound.lnk")
+                if (!string.IsNullOrEmpty(normalizedSearch))
+                {
+                    foreach (var file in lnkFiles)
+                    {
+                        var nameWithoutExt = Path.GetFileNameWithoutExtension(file);
+                        var normalizedName = System.Text.RegularExpressions.Regex.Replace(nameWithoutExt, @"[\s\-_]+", "");
+                        if (normalizedName.Equals(normalizedSearch, StringComparison.OrdinalIgnoreCase))
+                        {
+                            shortcutPath = file;
+                            return true;
+                        }
+                    }
+                }
+
+                // 3. Substring match
                 foreach (var file in lnkFiles)
                 {
                     var nameWithoutExt = Path.GetFileNameWithoutExtension(file);
-                    if (nameWithoutExt.Contains(searchToken, StringComparison.OrdinalIgnoreCase))
+                    var normalizedName = System.Text.RegularExpressions.Regex.Replace(nameWithoutExt, @"[\s\-_]+", "");
+                    if (nameWithoutExt.Contains(searchToken, StringComparison.OrdinalIgnoreCase) ||
+                        (!string.IsNullOrEmpty(normalizedSearch) && normalizedName.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase)))
                     {
                         shortcutPath = file;
                         return true;
+                    }
+                }
+            }
+            catch { }
+        }
+
+        return false;
+    }
+
+    private static bool TryFindInProgramFiles(string appName, out string exePath)
+    {
+        exePath = string.Empty;
+        var normalized = System.Text.RegularExpressions.Regex.Replace(appName.Trim(), @"[\s\-_]+", "");
+        if (string.IsNullOrEmpty(normalized)) return false;
+
+        string[] baseDirs = [
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs")
+        ];
+
+        foreach (var baseDir in baseDirs)
+        {
+            if (string.IsNullOrEmpty(baseDir) || !Directory.Exists(baseDir)) continue;
+            try
+            {
+                foreach (var subDir in Directory.EnumerateDirectories(baseDir))
+                {
+                    var dirName = Path.GetFileName(subDir);
+                    var normDir = System.Text.RegularExpressions.Regex.Replace(dirName, @"[\s\-_]+", "");
+                    if (normDir.Contains(normalized, StringComparison.OrdinalIgnoreCase))
+                    {
+                        var exes = Directory.EnumerateFiles(subDir, "*.exe", SearchOption.AllDirectories);
+                        foreach (var exe in exes)
+                        {
+                            var exeName = Path.GetFileNameWithoutExtension(exe);
+                            var normExe = System.Text.RegularExpressions.Regex.Replace(exeName, @"[\s\-_]+", "");
+                            if (normExe.Equals(normalized, StringComparison.OrdinalIgnoreCase))
+                            {
+                                exePath = exe;
+                                return true;
+                            }
+                        }
                     }
                 }
             }

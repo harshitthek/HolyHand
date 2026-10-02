@@ -1,4 +1,4 @@
-﻿using HolyHand.Core.Models;
+using HolyHand.Core.Models;
 using HolyHand.Core.Safety;
 
 namespace HolyHand.Core.Interfaces;
@@ -100,6 +100,15 @@ public interface IAppLauncher
     bool TryExtractUrlLaunch(string goal, out Uri url);
     Task<AppTarget?> LaunchAppAsync(string appName, string? launchCommand = null, CancellationToken cancellationToken = default);
     Task<AppTarget?> LaunchUrlAsync(Uri url, CancellationToken cancellationToken = default);
+}
+
+public interface IAudioService
+{
+    (float VolumePercent, bool IsMuted) GetMasterVolume();
+    void SetMasterVolume(float volumePercent);
+    void AdjustVolume(float deltaPercent);
+    bool ToggleMute();
+    void ShowVolumeFlyout();
 }
 
 public interface IWindowTracker

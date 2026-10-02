@@ -1,4 +1,4 @@
-﻿using System.Windows;
+using System.Windows;
 using System.Windows.Input;
 using HolyHand.Core.Interfaces;
 using HolyHand.Core.Models;
@@ -53,9 +53,22 @@ public partial class PromptPopupWindow : Window
         }
 
         PromptInput.Text = string.Empty;
+        WindowState = WindowState.Normal;
+        Visibility = Visibility.Visible;
+        Left = (SystemParameters.PrimaryScreenWidth - Width) / 2;
+        Top = 28;
         Show();
         Activate();
+        Topmost = true;
+        Focus();
         PromptInput.Focus();
+        Keyboard.Focus(PromptInput);
+
+        var helper = new System.Windows.Interop.WindowInteropHelper(this);
+        if (helper.Handle != IntPtr.Zero)
+        {
+            global::Windows.Win32.PInvoke.SetForegroundWindow((global::Windows.Win32.Foundation.HWND)helper.Handle);
+        }
     }
 
     public void UpdateTarget(AppTarget target)
@@ -100,13 +113,26 @@ public partial class PromptPopupWindow : Window
         Dispatcher.Invoke(() =>
         {
             SetExecuting(false);
-            if (!success)
+            if (success)
             {
-                StatusText.Text = "⚠ " + message;
-                StatusText.Foreground = System.Windows.Media.Brushes.OrangeRed;
-                Show();
-                Activate();
+                StatusText.Text = "✓ " + message;
+                StatusText.Foreground = System.Windows.Media.Brushes.LimeGreen;
             }
+            else
+            {
+                string friendlyMessage = message;
+                if (friendlyMessage.Contains("below threshold", StringComparison.OrdinalIgnoreCase))
+                {
+                    var targetName = _currentTarget != null && !string.IsNullOrWhiteSpace(_currentTarget.ProcessName)
+                        ? _currentTarget.ProcessName
+                        : "the active window";
+                    friendlyMessage = $"No matching action found in {targetName}. Try specifying an exact action, app, or system command.";
+                }
+                StatusText.Text = "⚠ " + friendlyMessage;
+                StatusText.Foreground = System.Windows.Media.Brushes.OrangeRed;
+            }
+            Show();
+            Activate();
         });
     }
 
@@ -241,6 +267,14 @@ public partial class PromptPopupWindow : Window
         {
             e.Handled = true;
             HidePopup();
+        }
+    }
+
+    private void Window_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton == MouseButton.Left)
+        {
+            DragMove();
         }
     }
 }

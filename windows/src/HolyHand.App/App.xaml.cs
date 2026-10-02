@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Net.Http;
 using System.Windows;
 using HolyHand.App.Windows;
@@ -8,6 +8,7 @@ using HolyHand.Core.Interfaces;
 using HolyHand.Core.Jev;
 using HolyHand.Core.Safety;
 using HolyHand.Core.ScreenReading;
+using HolyHand.Platform.Audio;
 using HolyHand.Platform.Execution;
 using HolyHand.Platform.Hotkey;
 using HolyHand.Platform.Launcher;
@@ -24,7 +25,10 @@ namespace HolyHand.App;
 public partial class App : Application
 {
     private static Mutex? _singleInstanceMutex;
+    private static EventWaitHandle? _activateEvent;
     private const string MutexName = "Global\\HolyHand_SingleInstance_Mutex_2026";
+    private const string ActivateEventName = "Global\\HolyHand_Activate_Event_2026";
+    private const int NativeHotkeyId = 0x4848;
     private ServiceProvider? _serviceProvider;
 
     private IHotkeyService? _hotkeyService;
@@ -45,14 +49,33 @@ public partial class App : Application
         _singleInstanceMutex = new Mutex(true, MutexName, out createdNew);
         if (!createdNew)
         {
-            MessageBox.Show(
-                "HolyHand is already running in the background.\nPress Ctrl+Win to activate.",
-                "HolyHand",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
+            try
+            {
+                using var evt = EventWaitHandle.OpenExisting(ActivateEventName);
+                evt.Set();
+            }
+            catch { }
             Shutdown(0);
             return;
         }
+
+        try
+        {
+            _activateEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ActivateEventName);
+            Task.Run(() =>
+            {
+                while (true)
+                {
+                    _activateEvent.WaitOne();
+                    Dispatcher.Invoke(() =>
+                    {
+                        var target = _windowCapture?.CaptureForegroundWindow();
+                        _popup?.ShowForTarget(target);
+                    });
+                }
+            });
+        }
+        catch { }
 
         var services = new ServiceCollection();
         ConfigureServices(services);
@@ -83,7 +106,46 @@ public partial class App : Application
         _hotkeyService.KillSwitchTriggered += OnKillSwitchTriggered;
         _hotkeyService.Start();
 
-        _logger.LogInformation("HolyHand application started. Press Ctrl+Win to activate.");
+        // Register native fallback hotkey (Ctrl + Shift + Space)
+        try
+        {
+            var helper = new System.Windows.Interop.WindowInteropHelper(_popup);
+            helper.EnsureHandle();
+            var source = System.Windows.Interop.HwndSource.FromHwnd(helper.Handle);
+            source?.AddHook(WndProc);
+
+            const uint MOD_CONTROL = 0x0002;
+            const uint MOD_SHIFT = 0x0004;
+            const uint MOD_NOREPEAT = 0x4000;
+            const uint VK_SPACE = 0x20;
+
+            global::Windows.Win32.PInvoke.RegisterHotKey(
+                (global::Windows.Win32.Foundation.HWND)helper.Handle,
+                NativeHotkeyId,
+                (global::Windows.Win32.UI.Input.KeyboardAndMouse.HOT_KEY_MODIFIERS)(MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT),
+                VK_SPACE);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to register native RegisterHotKey fallback");
+        }
+
+        // Display prompt window immediately on launch
+        var initialTarget = _windowCapture?.CaptureForegroundWindow();
+        _popup.ShowForTarget(initialTarget);
+
+        _logger.LogInformation("HolyHand application started. Press Ctrl+Win or Ctrl+Shift+Space to activate.");
+    }
+
+    private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        const int WM_HOTKEY = 0x0312;
+        if (msg == WM_HOTKEY && wParam.ToInt32() == NativeHotkeyId)
+        {
+            OnHotkeyPressed(this, EventArgs.Empty);
+            handled = true;
+        }
+        return IntPtr.Zero;
     }
 
     private static void ConfigureServices(IServiceCollection services)
@@ -97,6 +159,7 @@ public partial class App : Application
         services.AddSingleton<IWindowCaptureService, WindowCaptureService>();
         services.AddSingleton<IHotkeyService, LowLevelKeyboardHook>();
         services.AddSingleton<IAppLauncher, AppLauncher>();
+        services.AddSingleton<IAudioService, WindowsAudioService>();
         services.AddSingleton<ISpeechInput>(sp => new WhisperSpeechService(
             fallbackService: null, // No fallback — WindowsSpeechService requires privacy policy acceptance
             logger: sp.GetService<ILogger<WhisperSpeechService>>()));
@@ -104,13 +167,21 @@ public partial class App : Application
 
     private void OnHotkeyPressed(object? sender, EventArgs e)
     {
+        _logger?.LogInformation("App.OnHotkeyPressed received! Dispatching to UI thread...");
         Dispatcher.Invoke(() =>
         {
-            var target = _windowCapture?.CaptureForegroundWindow();
-            _logger?.LogInformation("Trigger received. Foreground target: {ProcessName} ({Title})", 
-                target?.ProcessName ?? "None", target?.WindowTitle ?? "None");
-            
-            _popup?.ShowForTarget(target);
+            try
+            {
+                var target = _windowCapture?.CaptureForegroundWindow();
+                _logger?.LogInformation("Trigger received. Foreground target: {ProcessName} ({Title})",
+                    target?.ProcessName ?? "None", target?.WindowTitle ?? "None");
+
+                _popup?.ShowForTarget(target);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Error displaying popup in OnHotkeyPressed");
+            }
         });
     }
 
@@ -175,7 +246,8 @@ public partial class App : Application
                 var ocrService = new WindowsOcrService(NullLogger<WindowsOcrService>.Instance);
                 using var screenReader = new UiaScreenReader(ScreenReaderOptions.Default, ocrService, NullLogger<UiaScreenReader>.Instance);
                 var appLauncher = _serviceProvider?.GetService<IAppLauncher>() ?? new AppLauncher();
-                using var actionExecutor = new ActionExecutor(NullLogger<ActionExecutor>.Instance, dryRun: false, appLauncher: appLauncher)
+                var audioService = _serviceProvider?.GetService<IAudioService>() ?? new WindowsAudioService();
+                using var actionExecutor = new ActionExecutor(NullLogger<ActionExecutor>.Instance, dryRun: false, appLauncher: appLauncher, audioService: audioService)
                 {
                     TargetWindowHandle = target.WindowHandle,
                     ExpectedProcessId = target.ProcessId
@@ -193,7 +265,7 @@ public partial class App : Application
                 {
                     DryRun = false,
                     MaxSteps = 0, // 0 = unlimited; runs until task completed or cancelled
-                    MaxConsecutiveStalls = 15
+                    MaxConsecutiveStalls = 3
                 };
 
                 var windowTracker = _serviceProvider?.GetService<IWindowCaptureService>() as IWindowTracker;
@@ -250,6 +322,21 @@ public partial class App : Application
         _runCts?.Dispose();
         _hotkeyService?.Stop();
         _hotkeyService?.Dispose();
+
+        if (_popup != null)
+        {
+            try
+            {
+                var helper = new System.Windows.Interop.WindowInteropHelper(_popup);
+                if (helper.Handle != IntPtr.Zero)
+                {
+                    global::Windows.Win32.PInvoke.UnregisterHotKey((global::Windows.Win32.Foundation.HWND)helper.Handle, NativeHotkeyId);
+                }
+            }
+            catch { }
+        }
+
+        _activateEvent?.Dispose();
         _serviceProvider?.Dispose();
 
         if (_singleInstanceMutex != null)

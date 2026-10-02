@@ -41,8 +41,16 @@ public class LowLevelKeyboardHook : IHotkeyService
             SingleWriter = false
         });
 
-        _stateMachine.OnTrigger += () => HotkeyPressed?.Invoke(this, EventArgs.Empty);
-        _stateMachine.OnCancel += () => KillSwitchTriggered?.Invoke(this, EventArgs.Empty);
+        _stateMachine.OnTrigger += () =>
+        {
+            _logger.LogInformation("StateMachine.OnTrigger fired! Firing HotkeyPressed event.");
+            HotkeyPressed?.Invoke(this, EventArgs.Empty);
+        };
+        _stateMachine.OnCancel += () =>
+        {
+            _logger.LogInformation("StateMachine.OnCancel fired! Firing KillSwitchTriggered event.");
+            KillSwitchTriggered?.Invoke(this, EventArgs.Empty);
+        };
 
         // Start processing channel events asynchronously
         Task.Run(ProcessKeyChannelAsync);
@@ -127,10 +135,15 @@ public class LowLevelKeyboardHook : IHotkeyService
 
             int vk = (int)kbd.vkCode;
 
-            // Start menu suppression: if Win key is about to be released and Chord is active, inject dummy key 0xE8
-            if (isKeyUp && (vk is RawKeyEvent.VkLWin or RawKeyEvent.VkRWin) && !isInjected)
+            if (vk is RawKeyEvent.VkLControl or RawKeyEvent.VkRControl or RawKeyEvent.VkControl or RawKeyEvent.VkLWin or RawKeyEvent.VkRWin)
             {
-                if (_stateMachine.CurrentState.ChordArmed && !_stateMachine.CurrentState.Interrupted)
+                _logger.LogInformation("Hook modifier: vk=0x{Vk:X2}, isKeyUp={IsKeyUp}, injected={IsInjected}", vk, isKeyUp, isInjected);
+            }
+
+            // Start menu suppression: if Win key is about to be released and Chord was active, inject dummy key 0xE8
+            if (isKeyUp && (vk is RawKeyEvent.VkLWin or RawKeyEvent.VkRWin))
+            {
+                if (_stateMachine.ConsumeWinSuppression() || (_stateMachine.CurrentState.ChordArmed && !_stateMachine.CurrentState.Interrupted))
                 {
                     SuppressStartMenu();
                 }
@@ -149,33 +162,56 @@ public class LowLevelKeyboardHook : IHotkeyService
         return PInvoke.CallNextHookEx(_hHook, nCode, wParam, lParam);
     }
 
-    private static void SuppressStartMenu()
+    private void SuppressStartMenu()
     {
-        // Inject unassigned virtual key tap (VK 0xE8) to suppress Start menu
-        unsafe
+        try
         {
-            var inputs = stackalloc Windows.Win32.UI.Input.KeyboardAndMouse.INPUT[2];
-            inputs[0].type = Windows.Win32.UI.Input.KeyboardAndMouse.INPUT_TYPE.INPUT_KEYBOARD;
-            inputs[0].Anonymous.ki.wVk = (Windows.Win32.UI.Input.KeyboardAndMouse.VIRTUAL_KEY)RawKeyEvent.VkDummySuppression;
-            inputs[0].Anonymous.ki.dwFlags = 0; // KeyDown
+            _logger.LogInformation("Suppressing Windows Start menu via VK 0xE8 injection.");
+            // Inject unassigned virtual key tap (VK 0xE8) to suppress Start menu
+            unsafe
+            {
+                var inputs = stackalloc Windows.Win32.UI.Input.KeyboardAndMouse.INPUT[2];
+                inputs[0].type = Windows.Win32.UI.Input.KeyboardAndMouse.INPUT_TYPE.INPUT_KEYBOARD;
+                inputs[0].Anonymous.ki.wVk = (Windows.Win32.UI.Input.KeyboardAndMouse.VIRTUAL_KEY)RawKeyEvent.VkDummySuppression;
+                inputs[0].Anonymous.ki.dwFlags = 0; // KeyDown
 
-            inputs[1].type = Windows.Win32.UI.Input.KeyboardAndMouse.INPUT_TYPE.INPUT_KEYBOARD;
-            inputs[1].Anonymous.ki.wVk = (Windows.Win32.UI.Input.KeyboardAndMouse.VIRTUAL_KEY)RawKeyEvent.VkDummySuppression;
-            inputs[1].Anonymous.ki.dwFlags = Windows.Win32.UI.Input.KeyboardAndMouse.KEYBD_EVENT_FLAGS.KEYEVENTF_KEYUP;
+                inputs[1].type = Windows.Win32.UI.Input.KeyboardAndMouse.INPUT_TYPE.INPUT_KEYBOARD;
+                inputs[1].Anonymous.ki.wVk = (Windows.Win32.UI.Input.KeyboardAndMouse.VIRTUAL_KEY)RawKeyEvent.VkDummySuppression;
+                inputs[1].Anonymous.ki.dwFlags = Windows.Win32.UI.Input.KeyboardAndMouse.KEYBD_EVENT_FLAGS.KEYEVENTF_KEYUP;
 
-            PInvoke.SendInput(2, inputs, Marshal.SizeOf<Windows.Win32.UI.Input.KeyboardAndMouse.INPUT>());
+                PInvoke.SendInput(2, inputs, Marshal.SizeOf<Windows.Win32.UI.Input.KeyboardAndMouse.INPUT>());
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error injecting dummy suppression key");
         }
     }
 
     private async Task ProcessKeyChannelAsync()
     {
-        var reader = _keyChannel.Reader;
-        while (await reader.WaitToReadAsync(_cts.Token))
+        try
         {
-            while (reader.TryRead(out var keyEvent))
+            var reader = _keyChannel.Reader;
+            while (await reader.WaitToReadAsync(_cts.Token))
             {
-                _stateMachine.ProcessKeyEvent(keyEvent);
+                while (reader.TryRead(out var keyEvent))
+                {
+                    try
+                    {
+                        _stateMachine.ProcessKeyEvent(keyEvent);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error processing key event in state machine");
+                    }
+                }
             }
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Fatal error in ProcessKeyChannelAsync");
         }
     }
 

@@ -472,4 +472,139 @@ public class JevDecisionModelTests
 
         risk.Should().Be(ActionRiskScore.ReversibleEdit);
     }
+
+    [Theory]
+    [InlineData("hi")]
+    [InlineData("hello")]
+    [InlineData("bark")]
+    [InlineData("help")]
+    public async Task DecideNextActionAsync_ConversationalGreeting_ReturnsAskUserWithGuidance(string greeting)
+    {
+        var model = CreateModel();
+        var decision = await model.DecideNextActionAsync(greeting, CreateTarget(), Array.Empty<AccessibilityElement>(), Array.Empty<string>());
+
+        decision.Operation.Should().Be(AgentOperation.AskUser);
+        decision.Reason.Should().Contain("HolyHand automates");
+    }
+
+    [Fact]
+    public async Task DecideNextActionAsync_VolumeCheck_ReturnsCheckVolumeDecision()
+    {
+        var response = new EvaluateResponse
+        {
+            Answers = new Dictionary<string, JsonElement>
+            {
+                ["nextAction"] = CreateChoiceAnswer("volume:check", 0.88)
+            }
+        };
+
+        _mockClient.Setup(c => c.EvaluateAsync(It.IsAny<EvaluateRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(response);
+
+        var model = CreateModel();
+        var decision = await model.DecideNextActionAsync("check system volume", CreateTarget(), Array.Empty<AccessibilityElement>(), Array.Empty<string>());
+
+        decision.Operation.Should().Be(AgentOperation.CheckVolume);
+        decision.Reason.Should().Contain("volume");
+    }
+
+    [Theory]
+    [InlineData("open fx sound", true)]
+    [InlineData("open fxsound", true)]
+    [InlineData("launch notepad", true)]
+    [InlineData("start calculator", true)]
+    [InlineData("please open spotify", true)]
+    [InlineData("switch to discord", true)]
+    [InlineData("open fx sound and click play", false)]
+    [InlineData("open notepad and type hello", false)]
+    [InlineData("check system volume", false)]
+    [InlineData("click button", false)]
+    public void IsPureLaunchGoal_CorrectlyClassifiesPhrases(string phrase, bool expected)
+    {
+        JevDecisionModel.IsPureLaunchGoal(phrase).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("check system volume", true)]
+    [InlineData("volume up", true)]
+    [InlineData("volume down", true)]
+    [InlineData("mute", true)]
+    [InlineData("unmute", true)]
+    [InlineData("louder", true)]
+    [InlineData("quieter", true)]
+    [InlineData("open notepad", false)]
+    [InlineData("click settings", false)]
+    public void IsVolumeGoal_CorrectlyClassifiesPhrases(string phrase, bool expected)
+    {
+        JevDecisionModel.IsVolumeGoal(phrase).Should().Be(expected);
+    }
+
+    [Fact]
+    public async Task DecideNextActionAsync_PureLaunchGoal_OmitsBackgroundUIElementsFromCandidates()
+    {
+        EvaluateRequest? capturedRequest = null;
+        var response = new EvaluateResponse
+        {
+            Answers = new Dictionary<string, JsonElement>
+            {
+                ["nextAction"] = CreateChoiceAnswer("open_app:fx sound", 0.99)
+            }
+        };
+
+        _mockClient.Setup(c => c.EvaluateAsync(It.IsAny<EvaluateRequest>(), It.IsAny<CancellationToken>()))
+            .Callback<EvaluateRequest, CancellationToken>((req, _) => capturedRequest = req)
+            .ReturnsAsync(response);
+
+        var elements = new List<AccessibilityElement>
+        {
+            new() { Id = "e1", Role = "Button", Label = "Chat Send", Enabled = true },
+            new() { Id = "e2", Role = "Edit", Label = "Prompt Input", Enabled = true }
+        };
+
+        var model = CreateModel();
+        var decision = await model.DecideNextActionAsync("open fx sound", CreateTarget(), elements, Array.Empty<string>());
+
+        decision.Operation.Should().Be(AgentOperation.OpenApp);
+        capturedRequest.Should().NotBeNull();
+        capturedRequest!.Questions.Should().ContainKey("nextAction");
+        var choices = capturedRequest.Questions["nextAction"].Criteria as Dictionary<string, string>;
+        choices.Should().NotBeNull();
+        choices!.Should().ContainKey("open_app:fx sound");
+        choices.Should().NotContainKey("click:e1");
+        choices.Should().NotContainKey("type:e2:fx sound");
+    }
+
+    [Fact]
+    public async Task DecideNextActionAsync_VolumeGoal_OmitsBackgroundUIElementsFromCandidates()
+    {
+        EvaluateRequest? capturedRequest = null;
+        var response = new EvaluateResponse
+        {
+            Answers = new Dictionary<string, JsonElement>
+            {
+                ["nextAction"] = CreateChoiceAnswer("volume:check", 0.95)
+            }
+        };
+
+        _mockClient.Setup(c => c.EvaluateAsync(It.IsAny<EvaluateRequest>(), It.IsAny<CancellationToken>()))
+            .Callback<EvaluateRequest, CancellationToken>((req, _) => capturedRequest = req)
+            .ReturnsAsync(response);
+
+        var elements = new List<AccessibilityElement>
+        {
+            new() { Id = "e1", Role = "Button", Label = "Discord Channel", Enabled = true }
+        };
+
+        var model = CreateModel();
+        var decision = await model.DecideNextActionAsync("check system volume", CreateTarget(), elements, Array.Empty<string>());
+
+        decision.Operation.Should().Be(AgentOperation.CheckVolume);
+        capturedRequest.Should().NotBeNull();
+        var choices = capturedRequest!.Questions["nextAction"].Criteria as Dictionary<string, string>;
+        choices.Should().NotBeNull();
+        choices!.Should().ContainKey("volume:check");
+        choices.Should().NotContainKey("click:e1");
+    }
 }
+
+

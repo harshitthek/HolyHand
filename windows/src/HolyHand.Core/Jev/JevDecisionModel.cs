@@ -27,6 +27,16 @@ public class JevDecisionModel : IDecisionModel
         IReadOnlyList<string> history,
         CancellationToken cancellationToken = default)
     {
+        // Check for conversational or non-task prompts (e.g. greetings)
+        if (IsConversationalOrGreeting(goal))
+        {
+            return new AgentDecision
+            {
+                Operation = AgentOperation.AskUser,
+                Reason = "HolyHand automates desktop tasks. Try asking to: 'open notepad', 'check system volume', 'mute', or click a button in the focused window."
+            };
+        }
+
         // 1. Build candidate action choices deterministically
         var candidateChoices = BuildCandidateChoices(goal, elements);
 
@@ -242,51 +252,70 @@ public class JevDecisionModel : IDecisionModel
             choices[$"open_url:{url}"] = $"Open web URL \"{url}\" in browser";
         }
 
-        // Extract search/literal candidate phrases from user goal
-        var textCandidates = ExtractCandidatePhrases(goal);
-
-        int clickCount = 0;
-        foreach (var el in elements)
+        // System Audio & Volume candidates
+        bool isVolumeGoal = IsVolumeGoal(goal);
+        if (isVolumeGoal)
         {
-            if (!el.Enabled) continue;
-
-            if (IsClickable(el.Role) && clickCount < 25)
-            {
-                clickCount++;
-                var key = $"click:{el.Id}";
-                var desc = $"Click {el.DisplayRole} \"{el.DisplayLabel}\"";
-                choices[key] = desc;
-            }
-
-            if (IsTypeable(el.Role) && textCandidates.Count > 0)
-            {
-                foreach (var textCandidate in textCandidates.Take(3))
-                {
-                    // If element already contains this exact text, avoid looping!
-                    if (!string.IsNullOrEmpty(el.Value) && el.Value.Contains(textCandidate, StringComparison.OrdinalIgnoreCase))
-                    {
-                        continue;
-                    }
-
-                    var keyEnter = $"type_and_enter:{el.Id}:{textCandidate}";
-                    var descEnter = $"Type \"{textCandidate}\" into {el.DisplayRole} \"{el.DisplayLabel}\" and press Enter";
-                    choices[keyEnter] = descEnter;
-
-                    var key = $"type:{el.Id}:{textCandidate}";
-                    var desc = $"Type \"{textCandidate}\" into {el.DisplayRole} \"{el.DisplayLabel}\"";
-                    choices[key] = desc;
-                }
-            }
+            choices["volume:check"] = "Check current system audio volume level";
+            choices["volume:up"] = "Increase system audio volume";
+            choices["volume:down"] = "Decrease system audio volume";
+            choices["volume:mute"] = "Toggle system audio mute";
+            choices["open_app:sndvol"] = "Open Windows Volume Mixer";
+            choices["open_app:ms-settings:sound"] = "Open Windows Sound Settings";
         }
 
-        // Standard actions
-        choices["press:enter"] = "Press Enter/Return key";
-        choices["press:space"] = "Press Spacebar to play/pause or select";
-        choices["press:media_play"] = "Press Media Play key to toggle playback";
-        choices["press:tab"] = "Press Tab key to advance focus";
-        choices["press:escape"] = "Press Escape key to dismiss dialog/menu";
-        choices["scroll:down"] = "Scroll down to reveal more controls";
-        choices["scroll:up"] = "Scroll up";
+        bool isPureLaunch = IsPureLaunchGoal(goal);
+
+        // Only populate foreground UI elements if the task is NOT a pure system command (app launch or audio)
+        if (!isVolumeGoal && !isPureLaunch)
+        {
+            // Extract search/literal candidate phrases from user goal
+            var textCandidates = ExtractCandidatePhrases(goal);
+
+            int clickCount = 0;
+            foreach (var el in elements)
+            {
+                if (!el.Enabled) continue;
+
+                if (IsClickable(el.Role) && clickCount < 25)
+                {
+                    clickCount++;
+                    var key = $"click:{el.Id}";
+                    var desc = $"Click {el.DisplayRole} \"{el.DisplayLabel}\"";
+                    choices[key] = desc;
+                }
+
+                if (IsTypeable(el.Role) && textCandidates.Count > 0)
+                {
+                    foreach (var textCandidate in textCandidates.Take(3))
+                    {
+                        // If element already contains this exact text, avoid looping!
+                        if (!string.IsNullOrEmpty(el.Value) && el.Value.Contains(textCandidate, StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
+
+                        var keyEnter = $"type_and_enter:{el.Id}:{textCandidate}";
+                        var descEnter = $"Type \"{textCandidate}\" into {el.DisplayRole} \"{el.DisplayLabel}\" and press Enter";
+                        choices[keyEnter] = descEnter;
+
+                        var key = $"type:{el.Id}:{textCandidate}";
+                        var desc = $"Type \"{textCandidate}\" into {el.DisplayRole} \"{el.DisplayLabel}\"";
+                        choices[key] = desc;
+                    }
+                }
+            }
+
+            // Standard actions for UI navigation
+            choices["press:enter"] = "Press Enter/Return key";
+            choices["press:space"] = "Press Spacebar to play/pause or select";
+            choices["press:media_play"] = "Press Media Play key to toggle playback";
+            choices["press:tab"] = "Press Tab key to advance focus";
+            choices["press:escape"] = "Press Escape key to dismiss dialog/menu";
+            choices["scroll:down"] = "Scroll down to reveal more controls";
+            choices["scroll:up"] = "Scroll up";
+        }
+
         choices["wait"] = "Wait 1 second for UI to update";
         choices["done"] = "Task is completely finished";
         choices["ask_user"] = "Need human guidance or clarification";
@@ -378,6 +407,10 @@ public class JevDecisionModel : IDecisionModel
             "press:enter" => new AgentDecision { Operation = AgentOperation.PressReturn, Confidence = confidence },
             "press:space" => new AgentDecision { Operation = AgentOperation.PressSpace, Confidence = confidence },
             "press:media_play" => new AgentDecision { Operation = AgentOperation.PressMediaPlay, Confidence = confidence },
+            "volume:check" => new AgentDecision { Operation = AgentOperation.CheckVolume, Confidence = confidence, Reason = "Check system audio volume" },
+            "volume:up" => new AgentDecision { Operation = AgentOperation.VolumeUp, Confidence = confidence, Reason = "Increase system volume" },
+            "volume:down" => new AgentDecision { Operation = AgentOperation.VolumeDown, Confidence = confidence, Reason = "Decrease system volume" },
+            "volume:mute" => new AgentDecision { Operation = AgentOperation.VolumeMute, Confidence = confidence, Reason = "Toggle system audio mute" },
             "press:tab" => new AgentDecision { Operation = AgentOperation.PressTab, Confidence = confidence },
             "press:escape" => new AgentDecision { Operation = AgentOperation.PressEscape, Confidence = confidence },
             "scroll:down" => new AgentDecision { Operation = AgentOperation.ScrollDown, Confidence = confidence },
@@ -386,6 +419,34 @@ public class JevDecisionModel : IDecisionModel
             "done" => new AgentDecision { Operation = AgentOperation.Done, Confidence = confidence },
             _ => new AgentDecision { Operation = AgentOperation.AskUser, Confidence = confidence }
         };
+    }
+
+    private static bool IsConversationalOrGreeting(string goal)
+    {
+        if (string.IsNullOrWhiteSpace(goal)) return false;
+        var cleaned = goal.Trim().ToLowerInvariant().TrimEnd('.', '!', '?', ' ');
+        string[] greetings = ["hi", "hello", "hey", "hola", "yo", "bark", "meow", "test", "who are you", "what can you do", "help"];
+        return greetings.Contains(cleaned);
+    }
+
+    public static bool IsVolumeGoal(string goal)
+    {
+        if (string.IsNullOrWhiteSpace(goal)) return false;
+        return Regex.IsMatch(goal, @"\b(?:volume|sound|audio|mute|unmute|quieter|louder)\b", RegexOptions.IgnoreCase);
+    }
+
+    public static bool IsPureLaunchGoal(string goal)
+    {
+        if (string.IsNullOrWhiteSpace(goal)) return false;
+        var trimmed = Regex.Replace(goal.Trim(), @"^(?:please\s+|can\s+you\s+|kindly\s+)", "", RegexOptions.IgnoreCase).TrimEnd('.', '!', '?', ' ');
+
+        // If it contains conjunctions indicating compound steps, it's not a pure launch
+        if (Regex.IsMatch(trimmed, @"\s+(?:and|then|after\s+that|followed\s+by)\s+", RegexOptions.IgnoreCase))
+        {
+            return false;
+        }
+
+        return Regex.IsMatch(trimmed, @"^(?:open|launch|start|run|switch\s+to|go\s+to|focus)\s+(?:the\s+app\s+)?([a-zA-Z0-9\-_ ]+)$", RegexOptions.IgnoreCase);
     }
 
     private static bool IsClickable(string role) =>

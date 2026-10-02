@@ -16,17 +16,19 @@ public class ActionExecutor : IActionExecutor, IDisposable
     private readonly ILogger<ActionExecutor> _logger;
     private readonly UIA3Automation _automation;
     private readonly IAppLauncher? _appLauncher;
+    private readonly IAudioService? _audioService;
     private bool _disposed;
 
     public bool DryRun { get; set; } = true;
     public int? ExpectedProcessId { get; set; }
     public IntPtr? TargetWindowHandle { get; set; }
 
-    public ActionExecutor(ILogger<ActionExecutor> logger, bool dryRun = true, IAppLauncher? appLauncher = null)
+    public ActionExecutor(ILogger<ActionExecutor> logger, bool dryRun = true, IAppLauncher? appLauncher = null, IAudioService? audioService = null)
     {
         _logger = logger;
         DryRun = dryRun;
         _appLauncher = appLauncher;
+        _audioService = audioService;
         _automation = new UIA3Automation();
     }
 
@@ -72,10 +74,14 @@ public class ActionExecutor : IActionExecutor, IDisposable
         }
 
         // Live execution mode: verify foreground process matches expected target (UIPI / safety check)
-        // Exempt OpenApp and OpenUrl as they deliberately launch new processes
+        // Exempt OpenApp and OpenUrl as they deliberately launch new processes, and volume operations as they are OS-level
         if (ExpectedProcessId.HasValue &&
             decision.Operation != AgentOperation.OpenApp &&
-            decision.Operation != AgentOperation.OpenUrl)
+            decision.Operation != AgentOperation.OpenUrl &&
+            decision.Operation != AgentOperation.CheckVolume &&
+            decision.Operation != AgentOperation.VolumeUp &&
+            decision.Operation != AgentOperation.VolumeDown &&
+            decision.Operation != AgentOperation.VolumeMute)
         {
             uint currentPid = GetForegroundProcessId();
 
@@ -171,6 +177,24 @@ public class ActionExecutor : IActionExecutor, IDisposable
                 case AgentOperation.PressMediaPlay:
                     InputSimulator.SendKey((VIRTUAL_KEY)0xB3); // VK_MEDIA_PLAY_PAUSE
                     return ActionResult.SuccessResult("Pressed Media Play/Pause key");
+
+                case AgentOperation.CheckVolume:
+                    var (vol, muted) = _audioService?.GetMasterVolume() ?? (50f, false);
+                    _audioService?.ShowVolumeFlyout();
+                    var volText = $"System volume is {(int)Math.Round(vol)}%{(muted ? " (Muted)" : " (Unmuted)")}";
+                    return ActionResult.SuccessResult(volText);
+
+                case AgentOperation.VolumeUp:
+                    _audioService?.AdjustVolume(5f);
+                    return ActionResult.SuccessResult("Increased system volume by 5%");
+
+                case AgentOperation.VolumeDown:
+                    _audioService?.AdjustVolume(-5f);
+                    return ActionResult.SuccessResult("Decreased system volume by 5%");
+
+                case AgentOperation.VolumeMute:
+                    var isMuted = _audioService?.ToggleMute() ?? false;
+                    return ActionResult.SuccessResult(isMuted ? "System audio muted" : "System audio unmuted");
 
                 case AgentOperation.ScrollDown:
                     InputSimulator.Scroll(down: true);

@@ -18,6 +18,10 @@ public enum AgentOperation
     OpenUrl,
     PressSpace,
     PressMediaPlay,
+    CheckVolume,
+    VolumeUp,
+    VolumeDown,
+    VolumeMute,
     Done,
     Blocked,
     AskUser

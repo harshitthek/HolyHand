@@ -1,5 +1,7 @@
 using System.Text.RegularExpressions;
+using HolyHand.Core.Common;
 using HolyHand.Core.Interfaces;
+using HolyHand.Core.Jev;
 using HolyHand.Core.Models;
 using HolyHand.Core.Safety;
 using Microsoft.Extensions.Logging;
@@ -23,12 +25,12 @@ public record AgentRunResult
     public IReadOnlyList<string> ActionHistory { get; init; } = Array.Empty<string>();
     public string? Message { get; init; }
 
-    public static AgentRunResult Completed(int steps, IReadOnlyList<string> history) => new()
+    public static AgentRunResult Completed(int steps, IReadOnlyList<string> history, string? message = null) => new()
     {
         Status = AgentRunStatus.Completed,
         StepsCompleted = steps,
         ActionHistory = history,
-        Message = "Goal successfully achieved."
+        Message = message ?? "Goal successfully achieved."
     };
 
     public static AgentRunResult NeedsHumanInput(int steps, IReadOnlyList<string> history, string? reason) => new()
@@ -363,6 +365,29 @@ public class AgentLoop
                     var err = result.ErrorMessage ?? result.Error ?? "Action execution failed.";
                     _logger.LogWarning("Action execution failed at step {Step}: {Error}", step, err);
                     return AgentRunResult.Failed(step, history, err);
+                }
+
+                // Immediate completion for one-shot system operations (volume checks/adjustments)
+                if (decision.Operation is AgentOperation.CheckVolume or AgentOperation.VolumeUp or AgentOperation.VolumeDown or AgentOperation.VolumeMute)
+                {
+                    var msg = result.Message ?? "Volume action completed";
+                    NotifyStatus(msg);
+                    return AgentRunResult.Completed(step, history, msg);
+                }
+
+                // Immediate completion for pure app launch or URL opening
+                if (decision.Operation == AgentOperation.OpenApp && JevDecisionModel.IsPureLaunchGoal(goal))
+                {
+                    var msg = result.Message ?? $"Launched application '{decision.TargetId}'";
+                    NotifyStatus(msg);
+                    return AgentRunResult.Completed(step, history, msg);
+                }
+
+                if (decision.Operation == AgentOperation.OpenUrl)
+                {
+                    var msg = result.Message ?? "Opened URL";
+                    NotifyStatus(msg);
+                    return AgentRunResult.Completed(step, history, msg);
                 }
 
                 // Dynamic Target Transition upon launching app/URL
