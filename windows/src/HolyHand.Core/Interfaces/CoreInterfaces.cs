@@ -116,3 +116,15 @@ public interface IWindowTracker
     AppTarget? GetActiveTarget(AppTarget currentTarget);
 }
 
+public record BatteryInfo(
+    int BatteryLifePercent,
+    bool IsCharging,
+    bool IsAcPlugged,
+    TimeSpan? EstimatedTimeRemaining,
+    string Summary);
+
+public interface IBatteryService
+{
+    BatteryInfo GetBatteryInfo();
+}
+

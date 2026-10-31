@@ -29,6 +29,12 @@ public enum AgentOperation
     LockWorkstation,
     ShowDesktop,
     TakeScreenshot,
+    CheckBattery,
+    MaximizeWindow,
+    MinimizeWindow,
+    RestoreWindow,
+    SnapWindowLeft,
+    SnapWindowRight,
     Done,
     Blocked,
     AskUser
