@@ -17,18 +17,25 @@ public class ActionExecutor : IActionExecutor, IDisposable
     private readonly UIA3Automation _automation;
     private readonly IAppLauncher? _appLauncher;
     private readonly IAudioService? _audioService;
+    private readonly IBatteryService? _batteryService;
     private bool _disposed;
 
     public bool DryRun { get; set; } = true;
     public int? ExpectedProcessId { get; set; }
     public IntPtr? TargetWindowHandle { get; set; }
 
-    public ActionExecutor(ILogger<ActionExecutor> logger, bool dryRun = true, IAppLauncher? appLauncher = null, IAudioService? audioService = null)
+    public ActionExecutor(
+        ILogger<ActionExecutor> logger,
+        bool dryRun = true,
+        IAppLauncher? appLauncher = null,
+        IAudioService? audioService = null,
+        IBatteryService? batteryService = null)
     {
         _logger = logger;
         DryRun = dryRun;
         _appLauncher = appLauncher;
         _audioService = audioService;
+        _batteryService = batteryService;
         _automation = new UIA3Automation();
     }
 
@@ -88,7 +95,13 @@ public class ActionExecutor : IActionExecutor, IDisposable
             decision.Operation != AgentOperation.MediaPrevious &&
             decision.Operation != AgentOperation.LockWorkstation &&
             decision.Operation != AgentOperation.ShowDesktop &&
-            decision.Operation != AgentOperation.TakeScreenshot)
+            decision.Operation != AgentOperation.TakeScreenshot &&
+            decision.Operation != AgentOperation.CheckBattery &&
+            decision.Operation != AgentOperation.MaximizeWindow &&
+            decision.Operation != AgentOperation.MinimizeWindow &&
+            decision.Operation != AgentOperation.RestoreWindow &&
+            decision.Operation != AgentOperation.SnapWindowLeft &&
+            decision.Operation != AgentOperation.SnapWindowRight)
         {
             uint currentPid = GetForegroundProcessId();
 
@@ -236,6 +249,30 @@ public class ActionExecutor : IActionExecutor, IDisposable
                 case AgentOperation.TakeScreenshot:
                     InputSimulator.SendKeyChord3((VIRTUAL_KEY)0x5B, (VIRTUAL_KEY)0x10, (VIRTUAL_KEY)0x53); // Win + Shift + S
                     return ActionResult.SuccessResult("Triggered Windows Snipping Tool (Win+Shift+S)");
+
+                case AgentOperation.CheckBattery:
+                    var batteryInfo = _batteryService?.GetBatteryInfo() ?? new BatteryInfo(-1, false, false, null, "Battery service unavailable");
+                    return ActionResult.SuccessResult(batteryInfo.Summary);
+
+                case AgentOperation.MaximizeWindow:
+                    InputSimulator.SendChord((VIRTUAL_KEY)0x5B, (VIRTUAL_KEY)0x26); // Win + Up
+                    return ActionResult.SuccessResult("Maximized window (Win+Up)");
+
+                case AgentOperation.MinimizeWindow:
+                    InputSimulator.SendChord((VIRTUAL_KEY)0x5B, (VIRTUAL_KEY)0x28); // Win + Down
+                    return ActionResult.SuccessResult("Minimized window (Win+Down)");
+
+                case AgentOperation.RestoreWindow:
+                    InputSimulator.SendChord((VIRTUAL_KEY)0x5B, (VIRTUAL_KEY)0x28); // Win + Down
+                    return ActionResult.SuccessResult("Restored window size (Win+Down)");
+
+                case AgentOperation.SnapWindowLeft:
+                    InputSimulator.SendChord((VIRTUAL_KEY)0x5B, (VIRTUAL_KEY)0x25); // Win + Left
+                    return ActionResult.SuccessResult("Snapped window to left half (Win+Left)");
+
+                case AgentOperation.SnapWindowRight:
+                    InputSimulator.SendChord((VIRTUAL_KEY)0x5B, (VIRTUAL_KEY)0x27); // Win + Right
+                    return ActionResult.SuccessResult("Snapped window to right half (Win+Right)");
 
                 case AgentOperation.ScrollDown:
                     InputSimulator.Scroll(down: true);
