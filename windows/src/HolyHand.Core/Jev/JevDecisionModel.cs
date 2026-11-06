@@ -297,8 +297,42 @@ public class JevDecisionModel : IDecisionModel
             }
         }
 
+        // Battery status candidates
+        bool isBatteryGoal = IsBatteryGoal(goal);
+        if (isBatteryGoal)
+        {
+            choices["battery:check"] = "Check current battery percentage and power status";
+            choices["open_app:ms-settings:powersleep"] = "Open Windows Power & Battery Settings";
+        }
+
+        // Window management candidates
+        bool isWindowGoal = IsWindowManagementGoal(goal);
+        if (isWindowGoal)
+        {
+            if (Regex.IsMatch(goal, @"\b(?:maximize|fullscreen)\b", RegexOptions.IgnoreCase))
+            {
+                choices["window:maximize"] = "Maximize current window";
+            }
+            if (Regex.IsMatch(goal, @"\bminimize\b", RegexOptions.IgnoreCase))
+            {
+                choices["window:minimize"] = "Minimize current window";
+            }
+            if (Regex.IsMatch(goal, @"\brestore\b", RegexOptions.IgnoreCase))
+            {
+                choices["window:restore"] = "Restore window size";
+            }
+            if (Regex.IsMatch(goal, @"\bleft\b", RegexOptions.IgnoreCase))
+            {
+                choices["window:snap_left"] = "Snap current window to the left half of screen";
+            }
+            if (Regex.IsMatch(goal, @"\bright\b", RegexOptions.IgnoreCase))
+            {
+                choices["window:snap_right"] = "Snap current window to the right half of screen";
+            }
+        }
+
         bool isPureLaunch = IsPureLaunchGoal(goal);
-        bool isSystemGoal = isVolumeGoal || isMediaGoal || isSystemControlGoal || isPureLaunch;
+        bool isSystemGoal = isVolumeGoal || isMediaGoal || isSystemControlGoal || isBatteryGoal || isWindowGoal || isPureLaunch;
 
         // Only populate foreground UI elements if the task is NOT a pure system command (app launch or audio)
         if (!isSystemGoal)
@@ -463,6 +497,12 @@ public class JevDecisionModel : IDecisionModel
             "system:lock" => new AgentDecision { Operation = AgentOperation.LockWorkstation, Confidence = confidence, Reason = "Lock workstation screen" },
             "system:show_desktop" => new AgentDecision { Operation = AgentOperation.ShowDesktop, Confidence = confidence, Reason = "Show Windows desktop" },
             "system:screenshot" => new AgentDecision { Operation = AgentOperation.TakeScreenshot, Confidence = confidence, Reason = "Take screenshot" },
+            "battery:check" => new AgentDecision { Operation = AgentOperation.CheckBattery, Confidence = confidence, Reason = "Check battery and power status" },
+            "window:maximize" => new AgentDecision { Operation = AgentOperation.MaximizeWindow, Confidence = confidence, Reason = "Maximize window" },
+            "window:minimize" => new AgentDecision { Operation = AgentOperation.MinimizeWindow, Confidence = confidence, Reason = "Minimize window" },
+            "window:restore" => new AgentDecision { Operation = AgentOperation.RestoreWindow, Confidence = confidence, Reason = "Restore window" },
+            "window:snap_left" => new AgentDecision { Operation = AgentOperation.SnapWindowLeft, Confidence = confidence, Reason = "Snap window left" },
+            "window:snap_right" => new AgentDecision { Operation = AgentOperation.SnapWindowRight, Confidence = confidence, Reason = "Snap window right" },
             "press:tab" => new AgentDecision { Operation = AgentOperation.PressTab, Confidence = confidence },
             "press:escape" => new AgentDecision { Operation = AgentOperation.PressEscape, Confidence = confidence },
             "scroll:down" => new AgentDecision { Operation = AgentOperation.ScrollDown, Confidence = confidence },
@@ -538,6 +578,18 @@ public class JevDecisionModel : IDecisionModel
     {
         if (string.IsNullOrWhiteSpace(goal)) return false;
         return Regex.IsMatch(goal, @"\b(?:lock(?:\s+(?:screen|pc|laptop|workstation|computer))?|show\s+desktop|minimize\s+all|hide\s+all\s+windows|take\s+screenshot|screenshot|snip|screen\s+snip|capture\s+screen)\b", RegexOptions.IgnoreCase);
+    }
+
+    public static bool IsBatteryGoal(string goal)
+    {
+        if (string.IsNullOrWhiteSpace(goal)) return false;
+        return Regex.IsMatch(goal, @"\b(?:battery|charging|power\s+(?:status|state|level)|power\s+saving|is\s+it\s+charging|battery\s+percentage|battery\s+life)\b", RegexOptions.IgnoreCase);
+    }
+
+    public static bool IsWindowManagementGoal(string goal)
+    {
+        if (string.IsNullOrWhiteSpace(goal)) return false;
+        return Regex.IsMatch(goal, @"\b(?:maximize(?:\s+window)?|minimize(?:\s+window)?|restore(?:\s+window)?|snap\s+(?:window\s+)?(?:left|right)|window\s+left|window\s+right|fullscreen)\b", RegexOptions.IgnoreCase);
     }
 
     public static bool IsPureLaunchGoal(string goal)
