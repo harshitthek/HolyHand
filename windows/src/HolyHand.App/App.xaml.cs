@@ -10,6 +10,7 @@ using HolyHand.Core.Jev;
 using HolyHand.Core.Safety;
 using HolyHand.Core.ScreenReading;
 using HolyHand.Platform.Audio;
+using HolyHand.Platform.Diagnostics;
 using HolyHand.Platform.Execution;
 using HolyHand.Platform.Hotkey;
 using HolyHand.Platform.Launcher;
@@ -233,6 +234,7 @@ public partial class App : Application
         services.AddSingleton<IHotkeyService, LowLevelKeyboardHook>();
         services.AddSingleton<IAppLauncher, AppLauncher>();
         services.AddSingleton<IAudioService, WindowsAudioService>();
+        services.AddSingleton<IBatteryService, WindowsBatteryService>();
         services.AddSingleton<ISpeechInput>(sp => new WhisperSpeechService(
             fallbackService: null, // No fallback — WindowsSpeechService requires privacy policy acceptance
             logger: sp.GetService<ILogger<WhisperSpeechService>>()));
@@ -330,7 +332,8 @@ public partial class App : Application
                 using var screenReader = new UiaScreenReader(ScreenReaderOptions.Default, ocrService, NullLogger<UiaScreenReader>.Instance);
                 var appLauncher = _serviceProvider?.GetService<IAppLauncher>() ?? new AppLauncher();
                 var audioService = _serviceProvider?.GetService<IAudioService>() ?? new WindowsAudioService();
-                using var actionExecutor = new ActionExecutor(NullLogger<ActionExecutor>.Instance, dryRun: false, appLauncher: appLauncher, audioService: audioService)
+                var batteryService = _serviceProvider?.GetService<IBatteryService>() ?? new WindowsBatteryService();
+                using var actionExecutor = new ActionExecutor(NullLogger<ActionExecutor>.Instance, dryRun: false, appLauncher: appLauncher, audioService: audioService, batteryService: batteryService)
                 {
                     TargetWindowHandle = target.WindowHandle,
                     ExpectedProcessId = target.ProcessId

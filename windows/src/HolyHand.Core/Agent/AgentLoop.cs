@@ -367,10 +367,11 @@ public class AgentLoop
                     return AgentRunResult.Failed(step, history, err);
                 }
 
-                // Immediate completion for one-shot system operations (volume checks/adjustments, media, workstation controls)
+                // Immediate completion for one-shot system operations (volume checks/adjustments, media, workstation controls, battery, window management)
                 if (decision.Operation is AgentOperation.CheckVolume or AgentOperation.VolumeUp or AgentOperation.VolumeDown or AgentOperation.VolumeMute or AgentOperation.VolumeSet
                     or AgentOperation.MediaPlayPause or AgentOperation.MediaNext or AgentOperation.MediaPrevious
-                    or AgentOperation.LockWorkstation or AgentOperation.ShowDesktop or AgentOperation.TakeScreenshot)
+                    or AgentOperation.LockWorkstation or AgentOperation.ShowDesktop or AgentOperation.TakeScreenshot
+                    or AgentOperation.CheckBattery or AgentOperation.MaximizeWindow or AgentOperation.MinimizeWindow or AgentOperation.RestoreWindow or AgentOperation.SnapWindowLeft or AgentOperation.SnapWindowRight)
                 {
                     var msg = result.Message ?? "System action completed";
                     NotifyStatus(msg);

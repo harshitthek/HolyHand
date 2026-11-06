@@ -367,7 +367,8 @@ public static class Program
         using var screenReader = new UiaScreenReader(ScreenReaderOptions.Default, ocrService, readerLogger);
         var appLauncher = new AppLauncher();
         var audioService = new HolyHand.Platform.Audio.WindowsAudioService();
-        using var actionExecutor = new ActionExecutor(execLogger, dryRun: !isLive, appLauncher: appLauncher, audioService: audioService);
+        var batteryService = new HolyHand.Platform.Diagnostics.WindowsBatteryService();
+        using var actionExecutor = new ActionExecutor(execLogger, dryRun: !isLive, appLauncher: appLauncher, audioService: audioService, batteryService: batteryService);
 
         var loopOptions = new AgentLoopOptions
         {
