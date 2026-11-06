@@ -129,7 +129,7 @@ dotnet run --project windows/src/HolyHand.App/HolyHand.App.csproj -c Release
 
 ### Running Tests
 
-HolyHand includes a comprehensive test suite (364 tests) covering the chord state machine, risk scoring, element ranker, secret sanitization, audio control, and loop guards:
+HolyHand includes a comprehensive test suite (430+ tests) covering the chord state machine, risk scoring, element ranker, secret sanitization, audio control, battery diagnostics, window snapping, and loop guards:
 
 ```powershell
 dotnet test windows/tests/HolyHand.Tests/HolyHand.Tests.csproj -c Release
@@ -143,7 +143,7 @@ dotnet test windows/tests/HolyHand.Tests/HolyHand.Tests.csproj -c Release
    - Tap **`Alt` + `Space`** or **`Win` + `Shift` + `H`** from any application.
    - Or click the **[ ● HOLYHAND ✦ ]** pill docked at the top of your display.
 2. **Enter Your Task**:
-   - Type your task in the Dynamic Island prompt (e.g. `open spotify`, `set volume to 60`, `search for docs on brave`, `check system volume`).
+   - Type your task in the Dynamic Island prompt (e.g. `open spotify`, `set volume to 60`, `check battery`, `snap left`, `check system volume`).
    - Or click **🎤 Mic** for push-to-talk offline transcription.
 3. **Execute**:
    - Press **Enter ↵** or click **Run ↵**.
